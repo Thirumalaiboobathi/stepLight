@@ -35,3 +35,7 @@ Choices made where the spec was ambiguous. Simplest reasonable option wins.
 28. **Both viewers have both Import and Export JSON** (shared code); the spec only required one each.
 29. **Icons** are generated from `viewer/public/logo.svg` by `packages/extension/scripts/make-icons.mjs` (Playwright screenshot) and committed.
 30. **Data-use disclosure:** local-only processing is declared as "not collected/transmitted"; categories handled locally are listed in docs/store-listing.md.
+31. **"Flagged" in the viewer means medium or above.** Low flags (e.g. visible instruction-like text) show only in step details: no list badge, no row highlight, and they don't count for "Clean" or for the auto-selected first flagged step.
+32. **Replay uses `aria-disabled`** (not `disabled`) so it stays focusable and keeps its tooltip; clicks are ignored in code.
+33. **Email detection is now `@`-anchored (`findEmails`)** instead of one big regex: the perf guard test (1 MB, 13 pathological inputs) showed the bounded regex still cost ~500 ms per megabyte because it tried 64-char lookbacks at every position.
+34. **`clearRuns` only deletes valid run folders** (readable `run.json`, safe id); unrelated files/folders in the runs directory are left alone. The demo clears only runs tagged `meta.agent = "demo-scripted"`.

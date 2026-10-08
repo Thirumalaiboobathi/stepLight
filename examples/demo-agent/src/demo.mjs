@@ -6,7 +6,9 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { steplight } from "@steplight/sdk";
 import { startFixtureSites } from "@steplight/fixtures-site";
+import { clearRuns } from "@steplight/core/node";
 
+const DEMO_AGENT = "demo-scripted";
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 /**
@@ -18,6 +20,9 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 export async function runDemo(options = {}) {
   const dir = options.dir ?? process.env.STEPLIGHT_DIR ?? path.join(REPO_ROOT, ".steplight", "runs");
   const log = options.quiet ? () => {} : (m) => console.log(m);
+  // Start from a clean slate: remove runs left by earlier demo executions (only those).
+  const removed = await clearRuns(dir, { filter: (r) => r.meta.agent === DEMO_AGENT });
+  if (removed.length) log(`cleared ${removed.length} previous demo run(s)`);
   const site = await startFixtureSites();
   const browser = await chromium.launch({ headless: true });
   try {
@@ -26,7 +31,7 @@ export async function runDemo(options = {}) {
     const run = await steplight.record(page, {
       task: "Book the cheapest flight from Delhi to Mumbai",
       dir,
-      meta: { agent: "demo-scripted" },
+      meta: { agent: DEMO_AGENT },
     });
     await page.goto(`${site.url}/flights.html`);
     const pageText = await page.evaluate(() => document.body.textContent ?? "");
@@ -50,7 +55,7 @@ export async function runDemo(options = {}) {
 
     // --- Run 2: a benign page; must produce no high flags ---
     const page2 = await browser.newPage();
-    const clean = await steplight.record(page2, { task: "Download the annual report PDF", dir });
+    const clean = await steplight.record(page2, { task: "Download the annual report PDF", dir, meta: { agent: DEMO_AGENT } });
     await page2.goto(`${site.url}/clean.html`);
     await page2.click("#download");
     await clean.end("success");

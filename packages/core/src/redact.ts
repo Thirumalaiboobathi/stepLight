@@ -11,7 +11,8 @@ export interface SensitiveMatch {
   index: number;
 }
 
-const EMAIL = /[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){0,5}\.[A-Za-z]{2,24}/g;
+/** Domain part of an email, matched (sticky) right after an `@`. Length-bounded. */
+const EMAIL_DOMAIN = /[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){0,5}\.[A-Za-z]{2,24}/y;
 const CARD = /\b(?:\d[ -]?){13,19}\b/g;
 const API_KEY =
   /\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{16,200}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{30,100}|xox[baprs]-[A-Za-z0-9-]{10,})\b/g;
@@ -31,6 +32,41 @@ export function decodePercent(text: string): string {
       return m;
     }
   });
+}
+
+function isLocalChar(code: number): boolean {
+  return (
+    (code >= 48 && code <= 57) || // 0-9
+    (code >= 65 && code <= 90) || // A-Z
+    (code >= 97 && code <= 122) || // a-z
+    code === 46 || code === 95 || code === 37 || code === 43 || code === 45 // . _ % + -
+  );
+}
+
+/**
+ * Find email addresses. Anchored on `@` (found with indexOf) so cost is linear in the text
+ * length plus at most ~64 characters of lookback per `@`; no regex backtracking over the
+ * whole input.
+ * @example findEmails("mail a@b.co now") // [{ value: "a@b.co", index: 5 }]
+ */
+export function findEmails(text: string): { value: string; index: number }[] {
+  const out: { value: string; index: number }[] = [];
+  let from = 0;
+  for (;;) {
+    const at = text.indexOf("@", from);
+    if (at < 0) break;
+    from = at + 1;
+    let start = at;
+    while (start > 0 && at - start < 64 && isLocalChar(text.charCodeAt(start - 1))) start--;
+    if (start === at) continue;
+    EMAIL_DOMAIN.lastIndex = at + 1;
+    const m = EMAIL_DOMAIN.exec(text);
+    if (!m) continue;
+    const end = at + 1 + m[0].length;
+    out.push({ value: text.slice(start, end), index: start });
+    from = end;
+  }
+  return out;
 }
 
 /**
@@ -69,9 +105,21 @@ export function findSensitive(input: string): SensitiveMatch[] {
   };
   collect(JWT, "jwt");
   collect(API_KEY, "api_key");
-  collect(EMAIL, "email");
+  for (const e of findEmails(text)) out.push({ kind: "email", value: e.value, index: e.index });
   collect(CARD, "card", luhnValid);
   return out;
+}
+
+function replaceEmails(text: string): string {
+  const found = findEmails(text);
+  if (found.length === 0) return text;
+  let out = "";
+  let pos = 0;
+  for (const e of found) {
+    out += text.slice(pos, e.index) + "[REDACTED:email]";
+    pos = e.index + e.value.length;
+  }
+  return out + text.slice(pos);
 }
 
 /**
@@ -82,7 +130,7 @@ export function redactText(text: string): string {
   let out = decodePercent(text);
   out = out.replace(JWT, "[REDACTED:jwt]");
   out = out.replace(API_KEY, "[REDACTED:api_key]");
-  out = out.replace(EMAIL, "[REDACTED:email]");
+  out = replaceEmails(out);
   out = out.replace(CARD, (m) => (luhnValid(m) ? "[REDACTED:card]" : m));
   return out;
 }

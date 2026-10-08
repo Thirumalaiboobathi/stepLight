@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "reac
 import type { Run, RunSummary } from "@steplight/core";
 import { buildBundle, downloadText, fetchRun, fetchRuns, importRunFile } from "./api";
 import { Logo } from "./components/Logo";
+import { firstFlaggedIndex } from "./format";
 import { RunList } from "./components/RunList";
 import { StepDetail } from "./components/StepDetail";
 import { Timeline } from "./components/Timeline";
@@ -29,6 +30,7 @@ export default function App() {
   const [error, setError] = useState<string | undefined>();
   const [notice, setNotice] = useState<string | undefined>();
   const fileRef = useRef<HTMLInputElement>(null);
+  const autoIndexFor = useRef<string | undefined>(undefined);
   const stepsRef = useRef(0);
   stepsRef.current = run?.steps.length ?? 0;
 
@@ -46,6 +48,12 @@ export default function App() {
       .then((r) => {
         setRuns(r);
         setError(undefined);
+        // On first load, open the newest run.
+        setRunId((current) => {
+          if (current || !r[0]) return current;
+          autoIndexFor.current = r[0].id;
+          return r[0].id;
+        });
       })
       .catch((e: Error) => setError(e.message));
   }, []);
@@ -61,7 +69,14 @@ export default function App() {
     let live = true;
     const load = () =>
       fetchRun(runId)
-        .then((r) => live && setRun(r))
+        .then((r) => {
+          if (!live) return;
+          setRun(r);
+          if (autoIndexFor.current === runId) {
+            autoIndexFor.current = undefined;
+            setIndex(firstFlaggedIndex(r.steps));
+          }
+        })
         .catch(() => undefined);
     void load();
     const t = run?.status === "running" ? setInterval(load, 2000) : undefined;
@@ -89,10 +104,11 @@ export default function App() {
     setReplaying(false);
     setRun(undefined);
     setIndex(0);
+    autoIndexFor.current = id;
     setRunId(id);
   };
   const toggleReplay = () => {
-    if (!run || run.steps.length === 0) return;
+    if (!run || run.steps.length === 0) return; // aria-disabled: ignore clicks
     if (!replaying && index >= run.steps.length - 1) setIndex(0);
     setReplaying((r) => !r);
   };
@@ -162,8 +178,13 @@ export default function App() {
           <button
             data-testid="replay"
             onClick={toggleReplay}
-            disabled={!run || run.steps.length === 0}
-            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-40"
+            aria-disabled={!run || run.steps.length === 0}
+            title={run ? "Replay the steps one by one" : "Select a run first"}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium text-white ${
+              run && run.steps.length > 0
+                ? "bg-indigo-600 hover:bg-indigo-500"
+                : "cursor-not-allowed bg-slate-400 opacity-60 dark:bg-slate-600"
+            }`}
           >
             {replaying ? "⏸ Pause" : "▶ Replay"}
           </button>

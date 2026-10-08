@@ -1,4 +1,4 @@
-import type { Severity, Step, StepKind } from "@steplight/core";
+import { maxSeverity, severityRank, type Flag, type Severity, type Step, type StepKind } from "@steplight/core";
 
 /** Icon shown for each kind of step. */
 export const KIND_ICON: Record<StepKind, string> = {
@@ -76,4 +76,21 @@ export function describeStep(step: Step): string {
     case "error":
       return step.targetText ?? "Error";
   }
+}
+
+/**
+ * Highest severity among flags that deserve attention in lists (medium and above).
+ * Low flags (for example visible instruction-like text) only appear in step details.
+ */
+export function notableSeverity(flags: readonly Pick<Flag, "severity">[]): Severity | undefined {
+  const worst = maxSeverity(flags);
+  return worst && severityRank(worst) >= severityRank("medium") ? worst : undefined;
+}
+
+/** Index of the first step with a medium-or-above flag, or 0 when there is none. */
+export function firstFlaggedIndex(
+  steps: readonly { flags: readonly Pick<Flag, "severity">[] }[],
+): number {
+  const i = steps.findIndex((s) => notableSeverity(s.flags) !== undefined);
+  return i < 0 ? 0 : i;
 }

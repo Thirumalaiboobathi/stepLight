@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Step } from "@steplight/core";
-import { describeStep, offset, shortUrl } from "./format";
+import { describeStep, firstFlaggedIndex, notableSeverity, offset, shortUrl } from "./format";
 import { highlight } from "./components/StepDetail";
 
 const step = (over: Partial<Step>): Step => ({
@@ -39,5 +39,20 @@ describe("highlight", () => {
   it("returns plain text when there is no evidence", () => {
     expect(highlight("hello", [])).toEqual(["hello"]);
     expect(highlight("hello", ["zzzz"]).filter((n) => typeof n === "object")).toHaveLength(0);
+  });
+});
+
+describe("notable severity", () => {
+  const f = (severity: "low" | "medium" | "high") => ({ severity });
+  it("hides low flags from lists", () => {
+    expect(notableSeverity([f("low")])).toBeUndefined();
+    expect(notableSeverity([])).toBeUndefined();
+    expect(notableSeverity([f("low"), f("medium")])).toBe("medium");
+    expect(notableSeverity([f("high"), f("low")])).toBe("high");
+  });
+  it("finds the first step worth looking at", () => {
+    expect(firstFlaggedIndex([{ flags: [] }, { flags: [f("low")] }, { flags: [f("high")] }])).toBe(2);
+    expect(firstFlaggedIndex([{ flags: [f("low")] }, { flags: [] }])).toBe(0);
+    expect(firstFlaggedIndex([])).toBe(0);
   });
 });

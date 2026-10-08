@@ -1,5 +1,5 @@
-import { maxSeverity, type Run } from "@steplight/core";
-import { KIND_ICON, SEVERITY_STYLE, describeStep, offset, shortUrl } from "../format";
+import type { Run } from "@steplight/core";
+import { KIND_ICON, SEVERITY_STYLE, describeStep, notableSeverity, offset, shortUrl } from "../format";
 import { SeverityBadge } from "./SeverityBadge";
 
 /** Vertical timeline of steps. Steps after `revealUpTo` are dimmed during replay. */
@@ -12,7 +12,7 @@ export function Timeline(props: {
   return (
     <ol className="space-y-1.5 p-3 sm:p-4">
       {props.run.steps.map((step) => {
-        const worst = maxSeverity(step.flags);
+        const worst = notableSeverity(step.flags);
         const selected = step.index === props.selectedIndex;
         const dim = step.index > props.revealUpTo;
         return (

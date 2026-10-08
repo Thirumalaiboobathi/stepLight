@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import { DEFAULT_RUNS_DIR, exportRunOtlp, readRun, DEFAULT_OTLP_ENDPOINT } from "@steplight/core/node";
+import { DEFAULT_RUNS_DIR, clearRuns, exportRunOtlp, readRun, DEFAULT_OTLP_ENDPOINT } from "@steplight/core/node";
 import { createViewerServer, findViewerDir } from "./server.js";
 
 /** Default port of the local viewer / ingest server. */
@@ -61,6 +61,22 @@ export function buildProgram(): Command {
         console.error(`steplight: ${err instanceof Error ? err.message : String(err)}`);
         process.exitCode = 1;
       }
+    });
+
+  program
+    .command("clear")
+    .description("Delete recorded runs (all, or all but the newest N with --keep)")
+    .option("-k, --keep <n>", "keep the newest N runs", "0")
+    .option("-d, --dir <dir>", "runs directory", process.env.STEPLIGHT_DIR ?? DEFAULT_RUNS_DIR)
+    .action(async (opts: { keep: string; dir: string }) => {
+      const keep = Number(opts.keep);
+      if (!Number.isInteger(keep) || keep < 0) {
+        console.error("steplight: --keep must be a non-negative integer");
+        process.exitCode = 1;
+        return;
+      }
+      const deleted = await clearRuns(path.resolve(opts.dir), { keep });
+      console.log(`Deleted ${deleted.length} run${deleted.length === 1 ? "" : "s"}${keep ? `, kept the newest ${keep}` : ""}.`);
     });
 
   return program;

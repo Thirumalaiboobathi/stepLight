@@ -1,4 +1,5 @@
 import type { RunSummary } from "@steplight/core";
+import { notableSeverity } from "../format";
 import { SeverityBadge } from "./SeverityBadge";
 
 const STATUS_DOT: Record<RunSummary["status"], string> = {
@@ -31,17 +32,32 @@ export function RunList(props: {
               run.id === props.selectedId ? "bg-slate-100 dark:bg-slate-800" : ""
             }`}
           >
-            <div className="flex items-center gap-2">
+            <div className="flex items-start gap-2">
               <span
-                className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[run.status]}`}
+                className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[run.status]}`}
                 title={run.status}
               />
-              <span className="truncate text-sm font-medium">{run.task}</span>
+              <span
+                title={run.task}
+                data-testid="run-task"
+                className="line-clamp-2 break-words text-sm font-medium"
+              >
+                {run.task}
+              </span>
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
               <span>{new Date(run.startedAt).toLocaleString()}</span>
               <span>· {run.stepCount} steps</span>
-              <SeverityBadge severity={run.maxSeverity} />
+              {notableSeverity(run.maxSeverity ? [{ severity: run.maxSeverity }] : []) ? (
+                <SeverityBadge severity={run.maxSeverity} />
+              ) : (
+                <span
+                  data-testid="clean-badge"
+                  className="inline-block shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200"
+                >
+                  Clean
+                </span>
+              )}
             </div>
           </button>
         </li>

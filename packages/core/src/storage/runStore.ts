@@ -164,3 +164,46 @@ export async function listRuns(root: string): Promise<RunSummary[]> {
   }
   return out.sort((a, b) => b.startedAt - a.startedAt);
 }
+
+/**
+ * Delete one stored run folder. Returns false if it did not exist.
+ * @example await deleteRun(".steplight/runs", "20261008-101500-a1b2c3")
+ */
+export async function deleteRun(root: string, runId: string): Promise<boolean> {
+  const dir = runDir(root, runId);
+  const exists = await fs.stat(dir).then(() => true, () => false);
+  if (exists) await fs.rm(dir, { recursive: true, force: true });
+  return exists;
+}
+
+/** Options for {@link clearRuns}. */
+export interface ClearOptions {
+  /** Keep the newest N runs (by start time) that match. Default 0. */
+  keep?: number;
+  /** Only consider runs for which this returns true (e.g. demo runs). */
+  filter?: (run: RunSummary & { meta: Run["meta"] }) => boolean;
+}
+
+/**
+ * Delete stored runs, optionally keeping the newest N. Only valid run folders inside `root`
+ * are touched. Returns the deleted run ids.
+ * @example await clearRuns(".steplight/runs", { keep: 5 })
+ */
+export async function clearRuns(root: string, options: ClearOptions = {}): Promise<string[]> {
+  const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+  const candidates: (RunSummary & { meta: Run["meta"] })[] = [];
+  for (const e of entries) {
+    if (!e.isDirectory() || !isSafeId(e.name)) continue;
+    try {
+      const run = await readRun(root, e.name);
+      const summary = { ...summarizeRun(run), meta: run.meta };
+      if (!options.filter || options.filter(summary)) candidates.push(summary);
+    } catch {
+      /* not a run folder: leave it alone */
+    }
+  }
+  candidates.sort((a, b) => b.startedAt - a.startedAt);
+  const doomed = candidates.slice(Math.max(0, options.keep ?? 0));
+  for (const r of doomed) await deleteRun(root, r.id);
+  return doomed.map((r) => r.id);
+}

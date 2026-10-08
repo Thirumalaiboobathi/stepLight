@@ -7,7 +7,7 @@ import { analyzeStep, inferCausedBy } from "./analyze.js";
 import { isCrossSite, registrableDomain } from "./domain.js";
 import { isSafeId, newRunId } from "./ids.js";
 import { exportRunOtlp } from "./otel/index.js";
-import { findSensitive, luhnValid, maskSensitive, maskValue, redactText, sanitizeBody, sanitizeSnapshot } from "./redact.js";
+import { findEmails, findSensitive, luhnValid, maskSensitive, maskValue, redactText, sanitizeBody, sanitizeSnapshot } from "./redact.js";
 import { maxSeverity } from "./severity.js";
 import { listRuns, readRun, readSnapshot, writeRun } from "./storage/runStore.js";
 import type { Run, Step } from "./types.js";
@@ -45,6 +45,13 @@ describe("redact", () => {
   it("masks values", () => {
     expect(maskValue("short")).toBe("••••");
     expect(maskValue("sk-abcdefghijkl")).toBe("sk-a…ijkl");
+  });
+  it("finds several emails, plus-tags and subdomains, and ignores non-emails", () => {
+    expect(findEmails("x a.b+c@sub.example.co.uk, d@e.io. @nope user@host").map((e) => e.value)).toEqual([
+      "a.b+c@sub.example.co.uk",
+      "d@e.io",
+    ]);
+    expect(redactText("a@b.co and c@d.org")).toBe("[REDACTED:email] and [REDACTED:email]");
   });
   it("masks evidence without revealing secrets", () => {
     const m = (kind: "email" | "card" | "api_key" | "jwt", value: string) => maskSensitive({ kind, value, index: 0 });
