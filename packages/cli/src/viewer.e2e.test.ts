@@ -223,6 +223,24 @@ describe("run diff / compare mode", () => {
   }, 60_000);
 });
 
+describe("copy as Playwright test", () => {
+  it("copies a runnable test for the selected run to the clipboard", async () => {
+    const context = await browser.newContext({ permissions: ["clipboard-read", "clipboard-write"] });
+    const page = await context.newPage();
+    await page.goto(base);
+    await page.getByTestId("run-item").filter({ has: page.getByText(FLIGHT_TASK, { exact: true }) }).click();
+    await page.getByTestId("step-item").first().waitFor();
+    await page.getByTestId("copy-test").click();
+    await expect_(page.getByTestId("notice")).toContainText("Copied a Playwright test");
+    const code = await page.evaluate(() => navigator.clipboard.readText());
+    expect(code).toContain('import { test, expect } from "@playwright/test";');
+    expect(code).toContain('await page.locator("a#select-premium").click();');
+    expect(code).toContain("TODO: the typed value was not recorded");
+    expect(code).not.toContain("traveler@example.com");
+    await context.close();
+  }, 60_000);
+});
+
 /** Tiny poll-based expect for locators (avoids pulling @playwright/test). */
 function expect_(locator: import("playwright").Locator) {
   const wait = (state: "visible") => locator.first().waitFor({ state, timeout: 10_000 });

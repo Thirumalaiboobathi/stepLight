@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import type { Run, RunSummary } from "@steplight/core";
-import { buildBundle, downloadText, fetchRun, fetchRuns, importRunFile } from "./api";
+import { buildBundle, copyText, downloadText, fetchRun, fetchRuns, importRunFile } from "./api";
 import { ComparePanel } from "./components/ComparePanel";
+import { generatePlaywrightTest } from "@steplight/core";
 import { Logo } from "./components/Logo";
 import { firstFlaggedIndex } from "./format";
 import { RunList } from "./components/RunList";
@@ -128,6 +129,16 @@ export default function App() {
       setNotice(`Export failed: ${(e as Error).message}`);
     }
   };
+  const copyTest = async () => {
+    if (!run) return;
+    try {
+      const code = generatePlaywrightTest(run);
+      await copyText(code);
+      setNotice("Copied a Playwright test to the clipboard. Set BASE_URL and run it with npx playwright test.");
+    } catch (e) {
+      setNotice(`Copy failed: ${(e as Error).message}`);
+    }
+  };
   const onImport = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -181,6 +192,15 @@ export default function App() {
             }`}
           >
             Compare
+          </button>
+          <button
+            data-testid="copy-test"
+            onClick={() => void copyTest()}
+            disabled={!run}
+            title="Generate a Playwright test that replays this run"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-40 dark:border-slate-700"
+          >
+            Copy as Playwright test
           </button>
           <button
             data-testid="export"

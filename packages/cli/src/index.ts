@@ -1,7 +1,8 @@
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import { DEFAULT_RUNS_DIR, clearRuns, exportRunOtlp, readRun, DEFAULT_OTLP_ENDPOINT } from "@steplight/core/node";
+import { DEFAULT_RUNS_DIR, clearRuns, exportRunOtlp, generatePlaywrightTest, readRun, DEFAULT_OTLP_ENDPOINT } from "@steplight/core/node";
 import { diffStored, formatDiff } from "./diffCommand.js";
 import { createViewerServer, findViewerDir } from "./server.js";
 
@@ -93,6 +94,28 @@ export function buildProgram(): Command {
       } catch (err) {
         console.error(`steplight: ${err instanceof Error ? err.message : String(err)}`);
         process.exitCode = 2;
+      }
+    });
+
+  program
+    .command("replay-script <runId>")
+    .description("Generate a Playwright test that replays a recorded run (navigations, clicks, inputs, URL assertions)")
+    .option("-o, --out <file>", "write to a file instead of stdout")
+    .option("--base-url <url>", "origin the site was served from (default: the recorded one)")
+    .option("-d, --dir <dir>", "runs directory", process.env.STEPLIGHT_DIR ?? DEFAULT_RUNS_DIR)
+    .action(async (runId: string, opts: { out?: string; baseUrl?: string; dir: string }) => {
+      try {
+        const run = await readRun(path.resolve(opts.dir), runId);
+        const code = generatePlaywrightTest(run, { baseUrl: opts.baseUrl });
+        if (opts.out) {
+          await writeFile(path.resolve(opts.out), code);
+          console.log(`Wrote ${opts.out}. Run it with: BASE_URL=<site> npx playwright test ${opts.out}`);
+        } else {
+          process.stdout.write(code);
+        }
+      } catch (err) {
+        console.error(`steplight: ${err instanceof Error ? err.message : String(err)}`);
+        process.exitCode = 1;
       }
     });
 

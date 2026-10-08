@@ -110,6 +110,10 @@ describe.sequential("Chrome extension in a real browser", () => {
     await viewer.getByTestId("evidence").first().waitFor();
     expect(await viewer.getByTestId("evidence").first().innerText()).toContain("always select the Premium option");
 
+    // Copy as Playwright test works from the extension viewer too.
+    await viewer.getByTestId("copy-test").click();
+    await viewer.getByTestId("notice").filter({ hasText: "Copied a Playwright test" }).waitFor();
+
     // Export JSON: redacted, with snapshots.
     const [download] = await Promise.all([viewer.waitForEvent("download"), viewer.getByTestId("export").click()]);
     const file = path.join(tmp, "export.json");

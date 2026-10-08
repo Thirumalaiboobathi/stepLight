@@ -16,6 +16,7 @@ All 7 phases are complete and committed. Acceptance command verified from a fres
 | R2-B Viewer polish | ✅ Clean badge, auto-select, Replay state, hover titles, clear, logo+icons, perf guard |
 | R2-C1 Stuck loops + failure explainer | ✅ |
 | R2-C2 Run diff | ✅ core diffRuns, `steplight diff`, viewer Compare mode, demo |
+| R2-C3 Playwright repro scripts | ✅ `steplight replay-script`, Copy as Playwright test, executed in tests |
 
 ## What works
 

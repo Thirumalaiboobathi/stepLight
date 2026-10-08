@@ -14,3 +14,4 @@ export * from "./bundle.js";
 export * from "./localStore.js";
 export * from "./diagnose.js";
 export * from "./diff.js";
+export * from "./repro.js";

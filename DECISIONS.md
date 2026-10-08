@@ -54,3 +54,11 @@ Choices made where the spec was ambiguous. Simplest reasonable option wins.
 43. **"Hidden text" attribution** in the summary: the side whose last page read before the divergence has a medium+ `hidden_instruction` flag while the other's has none.
 44. **`steplight diff` exits 1 when runs differ** (like `diff`), 2 on errors; `--json` prints the full RunDiff.
 45. **The demo's control run** is the same page served as `/flights.html?hidden=0` (injection stripped server-side), so both runs share a URL path and the diff lands on the click rather than the first navigation.
+
+### C3 reproducible Playwright test
+46. **`@playwright/test` is a devDependency of the CLI only** (to execute generated scripts in tests); the generator itself is a pure string builder in core and generated files import `@playwright/test`, which users already have for E2E tests.
+47. **A navigation within 5 s of a click/submit is a consequence, not an action:** it gets a URL assertion but no `goto`, so replays don't double-navigate. All URL assertions match the *path* only (regex, query/hash ignored).
+48. **Typed values were never recorded, so every fill is a `TODO_` placeholder.** Emails use `todo@example.com` (and passwords `TODO_PASSWORD`) because plain placeholder text fails HTML validation and would block the form submit being reproduced.
+49. **Recorded failures replay as expected failures** (`expect(locator.click({ timeout: 2000 })).rejects.toThrow()`) with the recorded error and likely cause as comments, so the generated test reproduces the agent's bug instead of "fixing" it.
+50. **The origin comes from `BASE_URL`** (default: where it was recorded); cross-origin navigations stay absolute.
+51. **Tests that spawn Playwright from inside a Vitest file must use async `spawn`**: the fixtures server lives in the same process and a blocking `spawnSync` deadlocks it.
