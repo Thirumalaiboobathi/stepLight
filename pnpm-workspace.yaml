@@ -5,11 +5,11 @@ onlyBuiltDependencies:
   - esbuild
 
 # Dependabot hands its cooldown (4 days) to pnpm as a release-age gate. These locked packages were
-# published inside that window (the OTel exporter and vite 6.4.4 are the versions we pinned for
+# published inside that window (the OpenTelemetry packages and vite 6.4.4 are the versions we pinned for
 # fixes; rollup ships often), and one too-young package fails the whole Dependabot npm job.
 # Temporary: remove the list once every locked version is older than 4 days (2026-10-11 or later).
 minimumReleaseAgeExclude:
-  - "@opentelemetry/exporter-trace-otlp-http"
+  - "@opentelemetry/*"
   - "rollup"
   - "@rollup/*"
   - "vite"
