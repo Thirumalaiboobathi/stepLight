@@ -1,0 +1,19 @@
+{
+  "name": "@steplight/extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Steplight Chrome MV3 recorder.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@steplight/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.3.4",
+    "vite": "^5.4.21"
+  }
+}

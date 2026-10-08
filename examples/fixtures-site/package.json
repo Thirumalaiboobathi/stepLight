@@ -1,0 +1,7 @@
+{
+  "name": "@steplight/fixtures-site",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "echo fixtures: nothing to build", "test": "echo fixtures: no tests" }
+}

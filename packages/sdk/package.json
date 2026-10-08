@@ -1,0 +1,31 @@
+{
+  "name": "@steplight/sdk",
+  "version": "0.1.0",
+  "description": "Record Playwright-driven AI agent runs with Steplight.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@steplight/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "playwright": ">=1.40"
+  },
+  "devDependencies": {
+    "playwright": "^1.64.0"
+  }
+}

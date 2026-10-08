@@ -1,0 +1,7 @@
+{
+  "name": "@steplight/demo-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "echo demo: nothing to build", "test": "echo demo: no tests", "demo": "echo demo" }
+}
