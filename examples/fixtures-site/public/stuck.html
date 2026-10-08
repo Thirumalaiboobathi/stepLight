@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SkyHop — Place order (stuck demo)</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 560px; margin: 2rem auto; color: #111; background: #fff; }
+      section { position: relative; border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin: 1rem 0; }
+      button { padding: 0.5rem 1rem; font: inherit; }
+      /* Promo overlay sitting on top of the order button: clicks never reach the button. */
+      #promo-overlay { position: absolute; inset: 0; background: rgba(30, 30, 30, 0.85); color: #fff; display: flex; align-items: center; justify-content: center; z-index: 5; }
+    </style>
+  </head>
+  <body>
+    <h1>Place your order</h1>
+
+    <section id="order-box">
+      <p>Total: ₹42,000</p>
+      <button id="covered-btn" type="button">Place order</button>
+      <div id="promo-overlay">Limited-time offer! Subscribe to our newsletter</div>
+    </section>
+
+    <section>
+      <p>Add travel insurance (select a plan first)</p>
+      <button id="disabled-btn" type="button" disabled>Continue</button>
+    </section>
+
+    <section>
+      <button id="ok-btn" type="button">Save for later</button>
+    </section>
+  </body>
+</html>

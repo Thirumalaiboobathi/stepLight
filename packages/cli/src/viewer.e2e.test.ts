@@ -9,6 +9,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runDemo } from "../../../examples/demo-agent/src/demo.mjs";
 import { createViewerServer, findViewerDir } from "./server.js";
 
+const FLIGHT_TASK = "Book the cheapest flight from Delhi to Mumbai";
+
 let dir: string;
 let server: Server;
 let browser: Browser;
@@ -36,7 +38,7 @@ describe("viewer", () => {
   it("shows the demo run and its hidden_instruction flag with highlighted evidence", async () => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     await page.goto(base);
-    await page.getByTestId("run-item").filter({ hasText: "Book the cheapest flight" }).click();
+    await page.getByTestId("run-item").filter({ has: page.getByText(FLIGHT_TASK, { exact: true }) }).click();
     await page.locator('[data-testid="step-item"][data-kind="page_read"][data-severity="high"]').first().click();
     const detail = page.getByTestId("step-detail");
     await expect_(detail.getByText("hidden_instruction")).toBeVisible();
@@ -52,7 +54,7 @@ describe("viewer", () => {
   it("replays steps automatically", async () => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     await page.goto(base);
-    await page.getByTestId("run-item").filter({ hasText: "Book the cheapest flight" }).click();
+    await page.getByTestId("run-item").filter({ has: page.getByText(FLIGHT_TASK, { exact: true }) }).click();
     await page.getByTestId("step-item").first().waitFor();
     await page.getByTestId("replay").click();
     await expect_(page.getByTestId("replay")).toContainText("Pause");
@@ -78,13 +80,17 @@ describe("viewer polish", () => {
   it("opens the newest run on load and jumps to its first flagged step", async () => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     await page.goto(base);
-    // Newest run is the clean annual-report run; nothing flagged → first step selected.
+    // Newest run is the stuck agent's: it opens on the first flagged step (the loop flag),
+    // with the "Why did this fail?" panel available for its failed clicks.
     await page.getByTestId("step-item").first().waitFor();
-    await expect_(page.locator("main h2")).toContainText("Download the annual report PDF");
-    expect(await page.locator('[data-testid="step-item"].ring-2').first().innerText()).toContain("#0 ");
+    await expect_(page.locator("main h2")).toContainText("Place the order");
+    const first = page.locator('[data-testid="step-item"].ring-2');
+    expect(await first.getAttribute("data-severity")).toBe("medium");
+    await page.getByTestId("step-detail").getByText("stuck_loop").waitFor();
+    await expect_(page.getByTestId("failure-panel")).toContainText("covered by div#promo-overlay");
 
     // Selecting the flagged run lands on its first flagged step (the page read with the injection).
-    await page.getByTestId("run-item").filter({ hasText: "Book the cheapest flight" }).click();
+    await page.getByTestId("run-item").filter({ has: page.getByText(FLIGHT_TASK, { exact: true }) }).click();
     await page.getByTestId("step-detail").getByText("hidden_instruction").waitFor();
     const selected = page.locator('[data-testid="step-item"].ring-2');
     expect(await selected.getAttribute("data-kind")).toBe("page_read");
@@ -98,7 +104,7 @@ describe("viewer polish", () => {
     await page.getByTestId("run-item").first().waitFor();
     const clean = page.getByTestId("run-item").filter({ hasText: "Download the annual report PDF" });
     await expect_(clean.getByTestId("clean-badge")).toContainText("Clean");
-    const flagged = page.getByTestId("run-item").filter({ hasText: "Book the cheapest flight" });
+    const flagged = page.getByTestId("run-item").filter({ has: page.getByText(FLIGHT_TASK, { exact: true }) });
     expect(await flagged.getByTestId("clean-badge").count()).toBe(0);
     expect(await flagged.getByTestId("severity-badge").innerText()).toMatch(/critical/i);
 
@@ -114,7 +120,7 @@ describe("viewer polish", () => {
   it("shows the full task on hover and wraps long titles to two lines", async () => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     await page.goto(base);
-    const task = page.getByTestId("run-task").filter({ hasText: "Book the cheapest flight" });
+    const task = page.getByTestId("run-task").filter({ has: page.getByText(FLIGHT_TASK, { exact: true }) });
     await task.waitFor();
     expect(await task.getAttribute("title")).toBe("Book the cheapest flight from Delhi to Mumbai");
     const lines = await task.evaluate((el) => {
@@ -154,6 +160,26 @@ describe("viewer polish", () => {
     await page.goto(base);
     await page.getByTestId("logo").waitFor();
     expect(await page.locator("header h1").innerText()).not.toMatch(/🔦|🚀/);
+    await page.close();
+  }, 60_000);
+});
+
+describe("failure explainer", () => {
+  it("explains covered, disabled and mistyped-selector failures and flags the loop", async () => {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await page.goto(base);
+    await page.getByTestId("run-item").filter({ has: page.getByText("Place the order", { exact: true }) }).click();
+    await page.getByTestId("step-item").first().waitFor();
+    expect(await page.getByTestId("failed-badge").count()).toBe(5);
+
+    const failed = page.locator('[data-testid="step-item"]').filter({ has: page.getByTestId("failed-badge") });
+    await failed.nth(3).click(); // #disabled-btn
+    await expect_(page.getByTestId("failure-reasons")).toContainText("Element is disabled");
+    await failed.nth(4).click(); // button#place-ordr
+    await expect_(page.getByTestId("failure-reasons")).toContainText("matched 0 elements");
+    await expect_(page.getByTestId("failure-similar")).toContainText("button#covered-btn");
+    await failed.nth(2).click(); // 3rd covered click carries the loop flag
+    await page.getByTestId("step-detail").getByText("Agent appears stuck").waitFor();
     await page.close();
   }, 60_000);
 });

@@ -23,7 +23,11 @@ export function Timeline(props: {
               data-severity={worst ?? ""}
               onClick={() => props.onSelect(step.index)}
               className={`flex w-full items-start gap-3 rounded-lg border border-l-4 border-slate-200 px-3 py-2 text-left transition dark:border-slate-800 ${
-                worst ? SEVERITY_STYLE[worst].row : "border-l-transparent bg-white dark:bg-slate-900"
+                worst
+                  ? SEVERITY_STYLE[worst].row
+                  : step.error
+                    ? "border-l-red-400 bg-red-50/60 dark:bg-red-950/30"
+                    : "border-l-transparent bg-white dark:bg-slate-900"
               } ${
                 selected
                   ? "ring-2 ring-indigo-500"
@@ -43,6 +47,14 @@ export function Timeline(props: {
                   {step.url ? ` · ${shortUrl(step.url)}` : ""}
                 </span>
               </span>
+              {step.error && (
+                <span
+                  data-testid="failed-badge"
+                  className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium uppercase text-red-800 dark:bg-red-900/50 dark:text-red-200"
+                >
+                  failed
+                </span>
+              )}
               <SeverityBadge
                 severity={worst}
                 label={worst ? `${step.flags.length} · ${worst}` : undefined}

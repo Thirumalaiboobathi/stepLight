@@ -3,6 +3,8 @@ import type { Frame, Page, Request } from "playwright";
 import {
   RunWriter,
   analyzeStep,
+  buildDiagnosis,
+  collectFailureContext,
   collectPageScan,
   exportRunOtlp,
   hiddenInstruction,
@@ -13,6 +15,7 @@ import {
   truncate,
   MAX_BODY_PREVIEW,
   DEFAULT_RUNS_DIR,
+  type FailureDiagnosis,
   type PageScan,
   type Run,
   type RunStatus,
@@ -41,6 +44,12 @@ export interface RunHandle {
   readonly dir: string;
   /** Record a note about the agent's reasoning (shown as an `agent_note` step). */
   note(text: string): Promise<void>;
+  /**
+   * Record a failure the SDK could not see itself (for example from a Locator action) as an
+   * `error` step. Pass the selector to also get the "Why did this fail?" analysis.
+   * @example try { await page.locator("#x").click() } catch (e) { await run.reportError(e, "#x"); throw e; }
+   */
+  reportError(error: unknown, selector?: string): Promise<void>;
   /** Finish the run, flush everything to disk, and (optionally) export OTel spans. */
   end(status?: Exclude<RunStatus, "running">): Promise<Run>;
 }
@@ -59,6 +68,8 @@ class Recorder implements RunHandle {
   private chain: Promise<void> = Promise.resolve();
   private ended = false;
   private lastNavUrl: string | undefined;
+  private readonly seenSelectors = new Set<string>();
+  private readonly wrapped: string[] = [];
 
   constructor(
     private readonly page: Page,
@@ -148,6 +159,8 @@ class Recorder implements RunHandle {
       });
     });
 
+    this.wrapActions();
+
     // Already on a page when recording started: record it too.
     if (page.url() && page.url() !== "about:blank") {
       const ts = Date.now();
@@ -199,7 +212,114 @@ class Recorder implements RunHandle {
     }
   }
 
+  /**
+   * Wrap the page's selector-based action methods so a failed action is recorded together with
+   * a diagnosis of why it failed. The original error is always re-thrown unchanged.
+   */
+  private wrapActions(): void {
+    const page = this.page as unknown as Record<string, unknown>;
+    const actions: Record<string, StepKind> = {
+      click: "click",
+      dblclick: "click",
+      check: "click",
+      uncheck: "click",
+      fill: "type",
+      type: "type",
+      press: "type",
+      selectOption: "type",
+    };
+    for (const [name, kind] of Object.entries(actions)) {
+      const original = page[name];
+      if (typeof original !== "function") continue;
+      page[name] = async (selector: unknown, ...rest: unknown[]) => {
+        try {
+          return await (original as (...a: unknown[]) => Promise<unknown>).call(this.page, selector, ...rest);
+        } catch (err) {
+          if (!this.ended && typeof selector === "string") await this.recordFailure(kind, name, selector, err);
+          throw err;
+        }
+      };
+      this.wrapped.push(name);
+    }
+    const goto = page["goto"];
+    if (typeof goto === "function") {
+      page["goto"] = async (url: unknown, ...rest: unknown[]) => {
+        try {
+          return await (goto as (...a: unknown[]) => Promise<unknown>).call(this.page, url, ...rest);
+        } catch (err) {
+          if (!this.ended) await this.reportError(err);
+          throw err;
+        }
+      };
+      this.wrapped.push("goto");
+    }
+  }
+
+  private unwrapActions(): void {
+    for (const name of this.wrapped) delete (this.page as unknown as Record<string, unknown>)[name];
+    this.wrapped.length = 0;
+  }
+
+  /** Diagnose (bounded to 1.5 s) and record a failed action. Never throws. */
+  private async recordFailure(kind: StepKind, action: string, selector: string, err: unknown): Promise<void> {
+    try {
+      const ts = Date.now();
+      const url = this.page.url();
+      let diagnosis: FailureDiagnosis | undefined;
+      try {
+        const ctx = await Promise.race([
+          this.page.evaluate(collectFailureContext, selector),
+          new Promise<undefined>((r) => setTimeout(() => r(undefined), 1500).unref?.()),
+        ]);
+        if (ctx) diagnosis = buildDiagnosis(ctx, this.seenSelectors.has(selector));
+      } catch (e) {
+        logError("diagnose", e);
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      this.enqueue("failure", async () => {
+        await this.addStep(kind, ts, {
+          url,
+          targetSelector: selector,
+          targetText: `${action} failed`,
+          error: message,
+          ...(diagnosis ? { diagnosis } : {}),
+        });
+      });
+    } catch (e) {
+      logError("recordFailure", e);
+    }
+  }
+
+  async reportError(error: unknown, selector?: string): Promise<void> {
+    try {
+      const ts = Date.now();
+      let diagnosis: FailureDiagnosis | undefined;
+      if (selector) {
+        try {
+          const ctx = await this.page.evaluate(collectFailureContext, selector);
+          diagnosis = buildDiagnosis(ctx, this.seenSelectors.has(selector));
+        } catch (e) {
+          logError("diagnose", e);
+        }
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      this.enqueue("error", async () => {
+        await this.addStep("error", ts, {
+          url: this.page.url(),
+          ...(selector ? { targetSelector: selector } : {}),
+          targetText: (message.split("\n")[0] ?? message).slice(0, 200),
+          error: message,
+          ...(diagnosis ? { diagnosis } : {}),
+        });
+      });
+      await this.chain;
+    } catch (e) {
+      logError("reportError", e);
+    }
+  }
+
   private async onPageEvent(ev: PageEvent, ts: number, url: string): Promise<void> {
+    if (ev.selector) this.seenSelectors.add(ev.selector);
     if (ev.type === "click") {
       await this.addStep("click", ts, { url, targetSelector: ev.selector, targetText: ev.text });
     } else if (ev.type === "change") {
@@ -230,6 +350,7 @@ class Recorder implements RunHandle {
   async end(status: Exclude<RunStatus, "running"> = "success"): Promise<Run> {
     if (!this.ended) {
       this.ended = true;
+      this.unwrapActions();
       await this.chain;
       const endedAt = Date.now();
       this.run = { ...this.run, status, endedAt, steps: this.steps };

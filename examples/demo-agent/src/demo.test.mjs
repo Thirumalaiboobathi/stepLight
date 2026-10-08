@@ -12,7 +12,7 @@ afterAll(async () => {
 
 it("demo run shows the injection, the causal link and the exfiltration", async () => {
   dir = await mkdtemp(path.join(os.tmpdir(), "steplight-demo-"));
-  const { flightsRunId, cleanRunId } = await runDemo({ dir, quiet: true });
+  const { flightsRunId, cleanRunId, safeRunId, stuckRunId } = await runDemo({ dir, quiet: true });
 
   const run = await readRun(dir, flightsRunId);
   const read = run.steps.find((s) => s.kind === "page_read" && s.url.includes("flights"));
@@ -27,4 +27,21 @@ it("demo run shows the injection, the causal link and the exfiltration", async (
   const clean = await readRun(dir, cleanRunId);
   const bad = clean.steps.flatMap((s) => s.flags).filter((f) => f.severity === "high" || f.severity === "critical");
   expect(bad).toEqual([]);
-}, 90_000);
+
+  // The same task on a page without the injection books Economy and sees no hidden instruction.
+  const safe = await readRun(dir, safeRunId);
+  expect(safe.steps.some((st) => st.kind === "click" && /economy/i.test(st.targetText))).toBe(true);
+  expect(safe.steps.flatMap((st) => st.flags).filter((f) => f.type === "hidden_instruction")).toEqual([]);
+
+  // The stuck agent: a loop flag plus a diagnosis for each kind of failure.
+  const stuck = await readRun(dir, stuckRunId);
+  const failed = stuck.steps.filter((st) => st.error);
+  expect(failed.length).toBe(5);
+  expect(stuck.steps.flatMap((st) => st.flags).some((f) => f.type === "stuck_loop")).toBe(true);
+  const reasons = failed.flatMap((st) => st.diagnosis.reasons).join(" | ");
+  expect(reasons).toContain("covered by div#promo-overlay");
+  expect(reasons).toContain("Element is disabled");
+  expect(reasons).toContain("matched 0 elements");
+  expect(failed.at(-1).diagnosis.similar.join(" | ")).toContain("button#covered-btn");
+  expect(stuck.status).toBe("failed");
+}, 120_000);

@@ -1,5 +1,6 @@
 import { crossDomainData, type HistoryPage } from "./detectors/crossDomainData.js";
 import { sensitiveOutbound } from "./detectors/sensitiveOutbound.js";
+import { stuckLoop } from "./detectors/stuckLoop.js";
 import { suspiciousRedirect } from "./detectors/suspiciousRedirect.js";
 import type { Flag, Step } from "./types.js";
 
@@ -17,6 +18,7 @@ export function analyzeStep(
   if (step.request) flags.push(...sensitiveOutbound(step.request, step.url));
   flags.push(...crossDomainData(step, pages));
   flags.push(...suspiciousRedirect(step, history));
+  flags.push(...stuckLoop(step, history));
   return flags;
 }
 

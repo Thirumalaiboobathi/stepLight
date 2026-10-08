@@ -39,3 +39,11 @@ Choices made where the spec was ambiguous. Simplest reasonable option wins.
 32. **Replay uses `aria-disabled`** (not `disabled`) so it stays focusable and keeps its tooltip; clicks are ignored in code.
 33. **Email detection is now `@`-anchored (`findEmails`)** instead of one big regex: the perf guard test (1 MB, 13 pathological inputs) showed the bounded regex still cost ~500 ms per megabyte because it tried 64-char lookbacks at every position.
 34. **`clearRuns` only deletes valid run folders** (readable `run.json`, safe id); unrelated files/folders in the runs directory are left alone. The demo clears only runs tagged `meta.agent = "demo-scripted"`.
+
+### C1 stuck loops & failure explainer
+35. **`stuck_loop` is reported once per streak** (3rd repeat), not on every further repeat, to keep timelines readable. Windows: 3 identical (kind+page+selector) among the last 6 steps, or 4 navigations to the same page (query/hash ignored).
+36. **Failed actions are recorded as the original kind** (`click`/`type`) with `error` + `diagnosis` set, so the timeline shows the agent's intent and repeated failures count as loops. Page-level `goto` failures and `run.reportError()` produce `error` steps.
+37. **The SDK wraps `page.click/dblclick/check/uncheck/fill/type/press/selectOption/goto`** (own-property shadows, removed on `end()`); the original error is re-thrown unchanged. Locator-based actions are not wrapped: use `run.reportError(err, selector)`. Diagnosis on the failure path is bounded to 1.5 s, the only time Steplight can delay the agent.
+38. **Diagnosis is computed from the live DOM at failure time** (covered = `elementFromPoint` at the element centre, disabled, hidden, off-screen, pointer-events, match count). "Similar selectors" come from interactive elements found then, ranked by bigram similarity of selector and text. Engines other than CSS and `text=` are reported as not evaluable.
+39. **The extension cannot see the agent's failed actions** (they never reach the page), so the failure explainer is SDK-only; the extension still gets stuck-loop detection, and its viewer renders diagnoses from imported SDK runs.
+40. **The demo's "control" run gets its own task title** ("… (control page)") so run lists and tests can tell it apart from the hijacked run.

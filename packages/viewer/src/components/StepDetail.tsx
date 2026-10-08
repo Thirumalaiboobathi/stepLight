@@ -46,6 +46,54 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+/** "Why did this fail?" panel: error, likely causes, matched elements and similar selectors. */
+function FailurePanel({ step }: { step: Step }) {
+  const d = step.diagnosis;
+  return (
+    <section
+      data-testid="failure-panel"
+      className="mt-4 rounded-lg border border-red-300 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/30"
+    >
+      <h3 className="text-sm font-semibold text-red-900 dark:text-red-200">Why did this fail?</h3>
+      {d && d.reasons.length > 0 && (
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm" data-testid="failure-reasons">
+          {d.reasons.map((r, i) => (
+            <li key={i}>{r}</li>
+          ))}
+        </ul>
+      )}
+      {d && d.similar.length > 0 && (
+        <div className="mt-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Similar elements on the page
+          </p>
+          <ul className="mt-1 space-y-1 font-mono text-xs" data-testid="failure-similar">
+            {d.similar.map((s, i) => (
+              <li key={i} className="break-all">
+                {s}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {d && d.elements.length > 0 && (
+        <p className="mt-3 break-all font-mono text-xs text-slate-600 dark:text-slate-300">
+          {d.selector} → {d.matchCount} match{d.matchCount === 1 ? "" : "es"}:{" "}
+          {d.elements.map((e) => `${e.selector}${e.text ? ` "${e.text}"` : ""}`).join(", ")}
+        </p>
+      )}
+      {step.error && (
+        <details className="mt-3">
+          <summary className="cursor-pointer text-xs text-slate-500 dark:text-slate-400">Error message</summary>
+          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-xs">
+            {step.error}
+          </pre>
+        </details>
+      )}
+    </section>
+  );
+}
+
 /** Details of the selected step: flags, causal links, request and highlighted snapshot. */
 export function StepDetail(props: { run: Run; step: Step; onJump: (index: number) => void }) {
   const { run, step } = props;
@@ -95,6 +143,8 @@ export function StepDetail(props: { run: Run; step: Step; onJump: (index: number
           ↪ Led to step #{e.index} ({e.kind}): {describeStep(e)}
         </button>
       ))}
+
+      {(step.error || step.diagnosis) && <FailurePanel step={step} />}
 
       {step.flags.length > 0 && (
         <Section title="Flags">

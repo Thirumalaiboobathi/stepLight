@@ -223,6 +223,16 @@ describe("events", () => {
     expect(session.pages.length).toBeLessThanOrEqual(5);
   });
 
+  it("flags a stuck loop (same click 3×) in the extension too", () => {
+    const session: Session = { runId: "r1", task: "t", startedAt: 0, steps: [], pages: [], mode: "connected" };
+    const click = (t: number): PageEventMsg => ({ kind: "click", url: "http://shop.test/cart", selector: "button#pay", text: "Pay", timestamp: t });
+    recordEvent(session, click(1));
+    recordEvent(session, click(2));
+    const out = recordEvent(session, click(3));
+    const flags = (out[0] as Extract<IngestMessage, { type: "step" }>).step.flags;
+    expect(flags.map((f) => f.type)).toEqual(["stuck_loop"]);
+  });
+
   it("processes concurrent events in order with consistent indexes", async () => {
     const t = fakeDeps();
     const handle = createMessageHandler(t.deps);

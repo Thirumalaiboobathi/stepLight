@@ -28,7 +28,8 @@ export type FlagType =
   | "hidden_instruction"
   | "cross_domain_data"
   | "sensitive_data_outbound"
-  | "suspicious_redirect";
+  | "suspicious_redirect"
+  | "stuck_loop";
 
 /** Flag severity, ordered low → critical. */
 export type Severity = "low" | "medium" | "high" | "critical";
@@ -48,6 +49,43 @@ export interface StepRequest {
   bodyPreview?: string;
 }
 
+/** One element a failed selector matched (or nearly matched). */
+export interface DiagnosedElement {
+  selector: string;
+  tag: string;
+  text: string;
+  visible: boolean;
+  disabled: boolean;
+  inViewport: boolean;
+  pointerEvents?: string;
+  /** Selector/text of the element on top of this one at its centre, if any. */
+  coveredBy?: string;
+}
+
+/** "Why did this fail?" analysis captured when an action on a selector fails. */
+export interface FailureDiagnosis {
+  selector: string;
+  /** Number of elements the selector matched; -1 when it could not be evaluated. */
+  matchCount: number;
+  elements: DiagnosedElement[];
+  /** Human-readable explanations, most likely first. */
+  reasons: string[];
+  /** Nearest similar selectors found on the page. */
+  similar: string[];
+}
+
+/** Estimated token cost of a page read (chars/4 heuristic, not a real tokenizer). */
+export interface PageTokens {
+  /** Estimated tokens of all text on the page, hidden included. */
+  total: number;
+  visibleChars: number;
+  hiddenChars: number;
+  boilerplateChars: number;
+  /** boilerplateChars / (visibleChars + hiddenChars), 0–1. */
+  boilerplateShare: number;
+  estimated: true;
+}
+
 /** One action or observation inside a run. */
 export interface Step {
   id: string;
@@ -65,6 +103,12 @@ export interface Step {
   flags: Flag[];
   /** Id of the step that most likely caused this step. */
   causedBy?: string;
+  /** Error message when the action failed (e.g. a click that timed out). */
+  error?: string;
+  /** Why the action failed. */
+  diagnosis?: FailureDiagnosis;
+  /** Token estimate for `page_read` steps. */
+  tokens?: PageTokens;
 }
 
 /** Final or current state of a run. */

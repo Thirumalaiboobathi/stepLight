@@ -12,3 +12,4 @@ export * from "./collect.js";
 export * from "./sanitize.js";
 export * from "./bundle.js";
 export * from "./localStore.js";
+export * from "./diagnose.js";

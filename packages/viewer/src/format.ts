@@ -56,6 +56,9 @@ export function shortUrl(url: string | undefined): string {
 
 /** One-line human description of a step. */
 export function describeStep(step: Step): string {
+  if (step.error && (step.kind === "click" || step.kind === "type")) {
+    return `Failed ${step.kind === "click" ? "click" : "input"} on ${step.targetSelector ?? "element"}`;
+  }
   switch (step.kind) {
     case "navigate":
       return `Navigated to ${shortUrl(step.url)}`;
