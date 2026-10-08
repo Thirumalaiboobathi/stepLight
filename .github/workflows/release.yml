@@ -89,5 +89,5 @@ jobs:
           case "$TAG" in *-*) dist_tag=next ;; esac
           echo "Publishing $TAG under dist-tag $dist_tag"
           for pkg in core redteam sdk cli; do
-            npm publish "tarballs/steplight-$pkg-${TAG#v}.tgz" --provenance --access public --tag "$dist_tag"
+            npm publish "./tarballs/steplight-$pkg-${TAG#v}.tgz" --provenance --access public --tag "$dist_tag"
           done

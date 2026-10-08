@@ -22,13 +22,13 @@
    ```
 5. Commit, push `main`, wait for CI to be green, then tag and push the tag (the tag must be `v` plus the exact version):
    ```bash
-   git tag v0.1.0-rc.1 && git push origin v0.1.0-rc.1
+   git tag v0.1.0-rc.2 && git push origin v0.1.0-rc.2
    ```
 6. Watch it: `gh run watch` (Release workflow). The `verify` job lints, builds, tests and packs; the `publish` job (the only one with `id-token: write`, and the only one in the `npm-release` environment) publishes exactly those tarballs.
 7. Check the result:
    ```bash
    for p in core sdk cli redteam; do npm view @steplight/$p dist-tags --json; done
-   npm view @steplight/core@0.1.0-rc.1 dist.attestations   # provenance attestation
+   npm view @steplight/core@0.1.0-rc.2 dist.attestations   # provenance attestation
    ```
 
 ## Dist-tags

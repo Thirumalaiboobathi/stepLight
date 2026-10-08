@@ -103,7 +103,7 @@ describe("GitHub workflows", () => {
   it("release publishes only on version tags, with provenance, after tests", () => {
     const release = workflows.find((w) => w.file === "release.yml")!;
     expect(release.doc.on).toEqual({ push: { tags: ["v*"] } });
-    expect(release.text.indexOf("pnpm -r test")).toBeLessThan(release.text.indexOf('npm publish "tarballs'));
+    expect(release.text.indexOf("pnpm -r test")).toBeLessThan(release.text.indexOf('npm publish "./tarballs'));
   });
 });
 
