@@ -62,3 +62,12 @@ Choices made where the spec was ambiguous. Simplest reasonable option wins.
 49. **Recorded failures replay as expected failures** (`expect(locator.click({ timeout: 2000 })).rejects.toThrow()`) with the recorded error and likely cause as comments, so the generated test reproduces the agent's bug instead of "fixing" it.
 50. **The origin comes from `BASE_URL`** (default: where it was recorded); cross-origin navigations stay absolute.
 51. **Tests that spawn Playwright from inside a Vitest file must use async `spawn`**: the fixtures server lives in the same process and a blocking `spawnSync` deadlocks it.
+
+### C4 agent CI checks
+52. **Rules are validated strictly** (unknown keys, wrong types and bad severities are errors, exit 2) so a typo cannot silently disable a CI gate.
+53. **`max_severity: X` fails on flags *more severe* than X**; `must_visit` matches substrings of path+query of navigate/page_read URLs (hosts are not matched); `must_not_visit_domains` matches the domain and subdomains, in any step URL or request target, reported once per host.
+54. **`max_steps` ignores `agent_note` steps**, since notes are reasoning rather than actions.
+55. **Exit codes:** 0 pass, 1 findings, 2 usage/config error, so CI can tell "agent misbehaved" from "gate misconfigured".
+56. **JUnit has one test case per configured rule** (passing rules appear as passed); **SARIF** points step findings at `steps.jsonl` line = index + 1 and run-level findings at `run.json`; levels: critical/high → error, medium → warning, low → note.
+57. **The GitHub Action is a composite action** that never fails the SARIF step, uploads first, then re-runs the check in text mode to fail the job. It is covered by YAML-parsing tests only (cannot be executed offline).
+58. **`yaml` is the only new CLI runtime dependency** (rules parsing).

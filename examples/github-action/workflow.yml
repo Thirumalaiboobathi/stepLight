@@ -1,0 +1,45 @@
+# Example workflow: run your agent's tests with the Steplight SDK recording, then gate the build.
+# Copy to .github/workflows/agent-check.yml and adapt the "Run the agent" step.
+name: agent-check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write # lets the action upload findings to code scanning
+
+jobs:
+  agent-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm -r build
+
+      # Your agent run. Anything that records with `steplight.record(page, { task })` works;
+      # here we use the scripted demo agent (writes to .steplight/runs).
+      - name: Run the agent
+        run: pnpm demo
+
+      - name: Steplight check
+        uses: ./examples/github-action # or: your-org/steplight/examples/github-action@main
+        with:
+          rules: examples/github-action/steplight.rules.yml
+          cli: node packages/cli/dist/bin.js
+          # run-id: <id>   # default: the newest run
+
+      # Optional: keep the raw runs so you can open them in the viewer (steplight view).
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: steplight-runs
+          path: .steplight/runs

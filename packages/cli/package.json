@@ -17,14 +17,15 @@
   },
   "dependencies": {
     "@steplight/core": "workspace:*",
-    "commander": "^12.1.0"
+    "commander": "^12.1.0",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",
     "@steplight/demo-agent": "workspace:*",
-    "@steplight/viewer": "workspace:*",
-    "playwright": "^1.64.0",
+    "@steplight/fixtures-site": "workspace:*",
     "@steplight/sdk": "workspace:*",
-    "@steplight/fixtures-site": "workspace:*"
+    "@steplight/viewer": "workspace:*",
+    "playwright": "^1.64.0"
   }
 }

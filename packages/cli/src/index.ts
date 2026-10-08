@@ -3,6 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { DEFAULT_RUNS_DIR, clearRuns, exportRunOtlp, generatePlaywrightTest, readRun, DEFAULT_OTLP_ENDPOINT } from "@steplight/core/node";
+import { runCheck } from "./checkCommand.js";
+import type { CheckFormat } from "./checkFormats.js";
 import { diffStored, formatDiff } from "./diffCommand.js";
 import { createViewerServer, findViewerDir } from "./server.js";
 
@@ -119,8 +121,36 @@ export function buildProgram(): Command {
       }
     });
 
+  program
+    .command("check [runId]")
+    .description("Fail (exit 1) when a run breaks the rules in steplight.rules.yml: for CI")
+    .option("--latest", "check the newest run")
+    .option("-r, --rules <file>", "rules file", "steplight.rules.yml")
+    .option("-f, --format <format>", "text | junit | sarif", "text")
+    .option("-o, --out <file>", "write the report to a file")
+    .option("-d, --dir <dir>", "runs directory", process.env.STEPLIGHT_DIR ?? DEFAULT_RUNS_DIR)
+    .action(async (runId: string | undefined, opts: { latest?: boolean; rules: string; format: string; out?: string; dir: string }) => {
+      if (!["text", "junit", "sarif"].includes(opts.format)) {
+        console.error(`steplight: unknown format "${opts.format}" (use text, junit or sarif)`);
+        process.exitCode = 2;
+        return;
+      }
+      const { output, exitCode } = await runCheck({
+        runId,
+        latest: opts.latest,
+        rulesFile: opts.rules,
+        format: opts.format as CheckFormat,
+        dir: opts.dir,
+        out: opts.out,
+      });
+      (exitCode === 2 ? console.error : console.log)(output);
+      process.exitCode = exitCode;
+    });
+
   return program;
 }
 export { createViewerServer, findViewerDir } from "./server.js";
 export type { IngestMessage, ServerOptions } from "./server.js";
 export { diffStored, formatDiff } from "./diffCommand.js";
+export { runCheck } from "./checkCommand.js";
+export { formatCheck } from "./checkFormats.js";

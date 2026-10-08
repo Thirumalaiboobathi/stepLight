@@ -1,0 +1,56 @@
+name: Steplight agent check
+description: >
+  Fail the build when a recorded AI-agent run breaks your rules (hidden prompt injections,
+  data sent to unknown domains, stuck loops, ...) and show the findings in GitHub code scanning.
+
+inputs:
+  run-id:
+    description: Run id to check. Empty = the newest run in runs-dir.
+    required: false
+    default: ""
+  rules:
+    description: Path to the rules file.
+    required: false
+    default: steplight.rules.yml
+  runs-dir:
+    description: Directory the SDK/extension wrote runs to.
+    required: false
+    default: .steplight/runs
+  cli:
+    description: Command that runs the Steplight CLI (override when using a workspace build).
+    required: false
+    default: npx --yes steplight
+  upload-sarif:
+    description: >-
+      Upload findings to GitHub code scanning ("true" or "false").
+      Needs the security-events write permission.
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Check agent run (SARIF report)
+      shell: bash
+      run: |
+        TARGET="${{ inputs.run-id }}"
+        if [ -z "$TARGET" ]; then TARGET="--latest"; fi
+        # Never fail here: the next steps upload the report first, then enforce the result.
+        ${{ inputs.cli }} check $TARGET \
+          --rules "${{ inputs.rules }}" --dir "${{ inputs.runs-dir }}" \
+          --format sarif --out steplight.sarif || true
+
+    - name: Upload findings to code scanning
+      if: ${{ inputs.upload-sarif == 'true' && hashFiles('steplight.sarif') != '' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: steplight.sarif
+        category: steplight
+
+    - name: Check agent run (fails the build on findings)
+      shell: bash
+      run: |
+        TARGET="${{ inputs.run-id }}"
+        if [ -z "$TARGET" ]; then TARGET="--latest"; fi
+        ${{ inputs.cli }} check $TARGET \
+          --rules "${{ inputs.rules }}" --dir "${{ inputs.runs-dir }}"
