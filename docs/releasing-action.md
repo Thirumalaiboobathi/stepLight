@@ -1,6 +1,6 @@
 # Releasing the GitHub Action
 
-The Action ships from a **separate public repository**, [Thirumalaiboobathi/steplight-check-action](https://github.com/Thirumalaiboobathi/steplight-check-action), which holds only built files. The source of truth is [packages/check-action](../packages/check-action) in this monorepo. GitHub Marketplace requires a public repository with one `action.yml` at its root and no workflow files, so nothing else lives there.
+The Action ships from a **separate public repository**, [steplight-dev/steplight-check-action](https://github.com/steplight-dev/steplight-check-action), which holds only built files. The source of truth is [packages/check-action](../packages/check-action) in this monorepo. GitHub Marketplace requires a public repository with one `action.yml` at its root and no workflow files, so nothing else lives there.
 
 What the public repository contains (enforced by the assemble script):
 
@@ -23,7 +23,7 @@ README.md  LICENSE  SECURITY.md
    pnpm --filter @steplight/check-action assemble
    ```
    It rebuilds the bundle, validates `action.yml`, writes `out/check-action/`, deletes anything not on the allow-list (a `.git` folder is kept) and prints every file with its size. It fails if a workflow file or any other stray file would end up in the output.
-4. **Push** the result. The first time: `git init -b main` inside `out/check-action/`, add the remote `https://github.com/Thirumalaiboobathi/steplight-check-action.git`. Afterwards, from `out/check-action/`:
+4. **Push** the result. The first time: `git init -b main` inside `out/check-action/`, add the remote `https://github.com/steplight-dev/steplight-check-action.git`. Afterwards, from `out/check-action/`:
    ```bash
    git add -A && git commit -m "Steplight Agent Check vX.Y.Z" && git push origin main
    ```
@@ -36,7 +36,7 @@ README.md  LICENSE  SECURITY.md
    ```
 6. **Create the GitHub release** for `vX.Y.Z` with notes (what changed, any input or output change):
    ```bash
-   gh release create vX.Y.Z --repo Thirumalaiboobathi/steplight-check-action --title vX.Y.Z --notes-file notes.md --verify-tag
+   gh release create vX.Y.Z --repo steplight-dev/steplight-check-action --title vX.Y.Z --notes-file notes.md --verify-tag
    ```
    The CLI cannot publish to the Marketplace; that is step 8.
 7. **Prove it on GitHub.** Update the SHA in the throwaway test repository `Thirumalaiboobathi/steplight-action-test` (`.github/workflows/test.yml`, pinned by commit SHA) and run `gh workflow run test.yml`. All jobs (clean run passes, hijacked run fails, `fail-on`, SARIF/JUnit files, traversal rejected) must be green.

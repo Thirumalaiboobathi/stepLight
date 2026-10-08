@@ -2,8 +2,8 @@
 
 ## GitHub Action (Marketplace): built, published to its own repository, proven on GitHub
 
-- Source: `packages/check-action` (private). Public repo: https://github.com/Thirumalaiboobathi/steplight-check-action, tags `v1.0.0` and `v1` on the same commit, release v1.0.0. Contains only `action.yml`, `dist/index.js`, `dist/licenses.txt`, `README.md`, `LICENSE`, `SECURITY.md` (verified from a fresh clone).
-- 52 tests in the package (rules, formats, inputs, traversal, summary escaping, workflow-command injection, the built bundle run as a subprocess with runner-style env vars, assemble allow-list, action.yml/README consistency). Whole repo: 722 tests passing (670 + 52), lint clean.
+- Source: `packages/check-action` (private). Public repo: https://github.com/steplight-dev/steplight-check-action, tags `v1.0.0` and `v1` on the same commit, release v1.0.0. Contains only `action.yml`, `dist/index.js`, `dist/licenses.txt`, `README.md`, `LICENSE`, `SECURITY.md` (verified from a fresh clone).
+- 52 tests in the package (rules, formats, inputs, traversal, summary escaping, workflow-command injection, the built bundle run as a subprocess with runner-style env vars, assemble allow-list, action.yml/README consistency). Whole repo: 726 tests passing, lint clean.
 - Proven on GitHub in `Thirumalaiboobathi/steplight-action-test`: clean run passes, hijacked run fails (annotation, outputs), `fail-on`, SARIF and JUnit files, path traversal rejected. All 5 jobs green: https://github.com/Thirumalaiboobathi/steplight-action-test/actions/runs/37781448258
 - Not done: the Marketplace listing itself (web UI only; steps in `docs/releasing-action.md`), and the main repository is still private, so the README's link to it will not resolve for others.
 - Release process: `docs/releasing-action.md`.

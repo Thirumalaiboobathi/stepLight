@@ -97,7 +97,7 @@ describe("published packages", () => {
       const pkg = JSON.parse(readFileSync(path.join(root, "packages", name, "package.json"), "utf8"));
       expect(pkg.publishConfig).toEqual({ access: "public", provenance: true });
       expect(pkg.license).toBe("Apache-2.0");
-      expect(pkg.repository?.url).toContain("github.com/steplight/steplight");
+      expect(pkg.repository?.url).toContain("github.com/steplight-dev/steplight");
       expect(pkg.private).toBeUndefined();
       expect(pkg.files.every((f: string) => ["dist", "viewer-dist"].includes(f))).toBe(true);
     });

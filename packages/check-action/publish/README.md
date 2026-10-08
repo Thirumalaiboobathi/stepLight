@@ -1,6 +1,6 @@
 # Steplight Agent Check
 
-A GitHub Action that runs [`steplight check`](https://github.com/Thirumalaiboobathi/stepLight) on a recorded run of an AI browser agent and **fails your workflow** when the agent was hijacked by a hidden prompt injection, sent data to a site it should not have, got stuck in a loop, or broke a rule you wrote.
+A GitHub Action that runs [`steplight check`](https://github.com/steplight-dev/steplight) on a recorded run of an AI browser agent and **fails your workflow** when the agent was hijacked by a hidden prompt injection, sent data to a site it should not have, got stuck in a loop, or broke a rule you wrote.
 
 Your agent records its run with the Steplight SDK or the Steplight browser extension (a folder of files under `.steplight/runs`). This action reads that folder, so there is nothing to install and no service to call.
 
@@ -28,8 +28,8 @@ jobs:
       # ... run your agent here so that it records into .steplight/runs ...
 
       # Pin third-party actions to a full commit SHA. Resolve the SHA of the release you want with:
-      #   git ls-remote https://github.com/Thirumalaiboobathi/steplight-check-action v1.0.0
-      - uses: Thirumalaiboobathi/steplight-check-action@<full-commit-sha> # v1.0.0
+      #   git ls-remote https://github.com/steplight-dev/steplight-check-action v1.0.0
+      - uses: steplight-dev/steplight-check-action@<full-commit-sha> # v1.0.0
         with:
           fail-on: high
 ```
@@ -51,7 +51,7 @@ jobs:
           persist-credentials: false
 
       - id: steplight
-        uses: Thirumalaiboobathi/steplight-check-action@<full-commit-sha> # v1.0.0
+        uses: steplight-dev/steplight-check-action@<full-commit-sha> # v1.0.0
         with:
           format: sarif
           output-file: steplight.sarif
@@ -112,4 +112,4 @@ The action reads files from the runner's workspace and writes the report and job
 
 ## About
 
-Part of [Steplight](https://github.com/Thirumalaiboobathi/stepLight), a flight recorder for AI agents that drive a browser: record, replay, and flag prompt injection and data exfiltration. Licensed under Apache-2.0. See [SECURITY.md](SECURITY.md) to report a vulnerability.
+Part of [Steplight](https://github.com/steplight-dev/steplight), a flight recorder for AI agents that drive a browser: record, replay, and flag prompt injection and data exfiltration. Licensed under Apache-2.0. See [SECURITY.md](SECURITY.md) to report a vulnerability.

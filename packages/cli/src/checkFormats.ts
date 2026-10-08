@@ -95,7 +95,7 @@ export function formatSarif(ctx: CheckContext): string {
               id,
               name: id,
               shortDescription: { text: RULE_DESCRIPTIONS[id] },
-              helpUri: "https://github.com/steplight/steplight#agent-ci-checks",
+              helpUri: "https://github.com/steplight-dev/steplight#agent-ci-checks",
               defaultConfiguration: { level: "error" },
             })),
           },

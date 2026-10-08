@@ -18,7 +18,7 @@ current and previous major will be supported.
 **Please do not open a public issue for a security problem.**
 
 Use GitHub's private vulnerability reporting:
-**<https://github.com/steplight/steplight/security/advisories/new>** (Security tab → *Report a vulnerability*).
+**<https://github.com/steplight-dev/steplight/security/advisories/new>** (Security tab → *Report a vulnerability*).
 This creates a private advisory visible only to the maintainers and you.
 
 Helpful details: affected package and version (`@steplight/core`, `sdk`, `cli`, `redteam`, or the Chrome extension),

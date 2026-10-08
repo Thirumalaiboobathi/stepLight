@@ -24,11 +24,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/steplight/steplight.git"
+    "url": "git+https://github.com/steplight-dev/steplight.git"
   },
-  "homepage": "https://github.com/steplight/steplight#readme",
+  "homepage": "https://github.com/steplight-dev/steplight#readme",
   "bugs": {
-    "url": "https://github.com/steplight/steplight/issues"
+    "url": "https://github.com/steplight-dev/steplight/issues"
   },
   "engines": {
     "node": ">=20"
