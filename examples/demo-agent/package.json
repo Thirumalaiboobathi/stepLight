@@ -3,5 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": { "build": "echo demo: nothing to build", "test": "echo demo: no tests", "demo": "echo demo" }
+  "scripts": {
+    "build": "echo demo-agent: nothing to build",
+    "test": "vitest run",
+    "demo": "node src/demo.mjs"
+  },
+  "dependencies": {
+    "@steplight/core": "workspace:*",
+    "@steplight/fixtures-site": "workspace:*",
+    "@steplight/sdk": "workspace:*",
+    "playwright": "^1.64.0"
+  }
 }

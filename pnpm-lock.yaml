@@ -30,7 +30,20 @@ importers:
         specifier: ^2.1.9
         version: 2.1.9(@types/node@20.19.43)(lightningcss@1.32.0)
 
-  examples/demo-agent: {}
+  examples/demo-agent:
+    dependencies:
+      '@steplight/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@steplight/fixtures-site':
+        specifier: workspace:*
+        version: link:../fixtures-site
+      '@steplight/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+      playwright:
+        specifier: ^1.64.0
+        version: 1.64.0
 
   examples/fixtures-site: {}
 
