@@ -81,7 +81,7 @@ Requirements: Node 20+, pnpm 9+.
 
 ```bash
 pnpm install
-pnpm exec playwright install chromium     # one-time: browser used by the SDK, demo and tests
+pnpm --filter @steplight/extension exec playwright install chromium     # one-time: browser used by the SDK, demo and tests
 pnpm -r build
 pnpm demo          # runs scripted agents against local fixture pages → .steplight/runs/
 pnpm view          # = steplight view → http://localhost:4777
@@ -200,7 +200,16 @@ steplight check <runId> --format junit --out steplight-junit.xml
 steplight check --latest --format sarif --out steplight.sarif           # GitHub code scanning
 ```
 
-A ready-to-use composite GitHub Action, an example workflow and a rules file live in [examples/github-action/](examples/github-action/README.md).
+**GitHub Action (Marketplace):** [Steplight Agent Check](https://github.com/Thirumalaiboobathi/steplight-check-action) runs the same check in a workflow with no install step: a single bundled file, no network calls, a redacted and escaped job summary, JUnit or SARIF output, and a `fail-on` severity threshold. Pin it by commit SHA:
+
+```yaml
+- uses: Thirumalaiboobathi/steplight-check-action@<full-commit-sha> # v1.0.0
+  with:
+    fail-on: high        # low | medium | high | critical
+    format: sarif        # text | junit | sarif
+```
+
+(The listing on GitHub Marketplace is published from that repository; until it is live, use the repository link.) The Action is built from [packages/check-action](packages/check-action); see [docs/releasing-action.md](docs/releasing-action.md). A composite-Action example, a workflow and a rules file that use the CLI instead live in [examples/github-action/](examples/github-action/README.md).
 
 ### Red-team your own agent
 

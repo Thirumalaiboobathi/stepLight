@@ -8,6 +8,17 @@
     "steplight": "./dist/bin.js"
   },
   "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./check": {
+      "types": "./dist/checkApi.d.ts",
+      "default": "./dist/checkApi.js"
+    }
+  },
   "files": [
     "dist",
     "viewer-dist"

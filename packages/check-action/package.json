@@ -1,0 +1,24 @@
+{
+  "name": "@steplight/check-action",
+  "version": "1.0.0",
+  "description": "GitHub Action that runs `steplight check` on recorded AI agent runs. Source of the public steplight-check-action repository.",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit && node scripts/build.mjs",
+    "test": "vitest run",
+    "assemble": "node scripts/assemble.mjs"
+  },
+  "dependencies": {
+    "@steplight/cli": "workspace:*",
+    "@steplight/core": "workspace:*",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

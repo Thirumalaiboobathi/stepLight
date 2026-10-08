@@ -1,0 +1,46 @@
+name: Steplight Agent Check
+description: Fail CI when a recorded AI browser-agent run hits prompt injection, data exfiltration or your own rules.
+author: Thirumalaiboobathi B
+branding:
+  icon: shield
+  color: purple
+
+inputs:
+  runs-dir:
+    description: Folder with recorded runs, relative to the workspace.
+    required: false
+    default: .steplight/runs
+  run-id:
+    description: Id of the run to check. Default is the latest run in runs-dir.
+    required: false
+    default: ""
+  rules:
+    description: Rules file (YAML), relative to the workspace. A missing default file is not an error.
+    required: false
+    default: steplight.rules.yml
+  format:
+    description: Report format, one of text, junit or sarif.
+    required: false
+    default: text
+  output-file:
+    description: Where to write the junit or sarif report, relative to the workspace. Default steplight-check.xml or .sarif.
+    required: false
+    default: ""
+  fail-on:
+    description: Fail when any flag has at least this severity (low, medium, high or critical).
+    required: false
+    default: high
+
+outputs:
+  result:
+    description: pass or fail.
+  flag-count:
+    description: Number of flags raised on the checked run, of any severity.
+  max-severity:
+    description: Highest flag severity on the run (low, medium, high, critical), or none.
+  report-file:
+    description: Absolute path of the written report file, or an empty string for the text format without output-file.
+
+runs:
+  using: node24
+  main: dist/index.js

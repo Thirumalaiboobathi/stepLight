@@ -11,3 +11,4 @@ playwright-report/
 
 # Built viewer copied into the CLI package before publishing
 packages/cli/viewer-dist/
+out/

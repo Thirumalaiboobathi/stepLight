@@ -9,7 +9,7 @@ Requirements: Node 20+ and pnpm 9+.
 ```bash
 git clone <your fork> && cd steplight
 pnpm install
-pnpm exec playwright install chromium     # browser for the SDK, demo and integration tests
+pnpm --filter @steplight/extension exec playwright install chromium     # browser for the SDK, demo and integration tests
 pnpm -r build
 ```
 

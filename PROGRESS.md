@@ -1,8 +1,16 @@
 # Progress
 
+## GitHub Action (Marketplace): built, published to its own repository, proven on GitHub
+
+- Source: `packages/check-action` (private). Public repo: https://github.com/Thirumalaiboobathi/steplight-check-action, tags `v1.0.0` and `v1` on the same commit, release v1.0.0. Contains only `action.yml`, `dist/index.js`, `dist/licenses.txt`, `README.md`, `LICENSE`, `SECURITY.md` (verified from a fresh clone).
+- 52 tests in the package (rules, formats, inputs, traversal, summary escaping, workflow-command injection, the built bundle run as a subprocess with runner-style env vars, assemble allow-list, action.yml/README consistency). Whole repo: 722 tests passing (670 + 52), lint clean.
+- Proven on GitHub in `Thirumalaiboobathi/steplight-action-test`: clean run passes, hijacked run fails (annotation, outputs), `fail-on`, SARIF and JUnit files, path traversal rejected. All 5 jobs green: https://github.com/Thirumalaiboobathi/steplight-action-test/actions/runs/37781448258
+- Not done: the Marketplace listing itself (web UI only; steps in `docs/releasing-action.md`), and the main repository is still private, so the README's link to it will not resolve for others.
+- Release process: `docs/releasing-action.md`.
+
 ## Round 3 status: complete
 
-Network capture plus security and privacy hardening. Verified from a fresh `git clone`: `pnpm install --frozen-lockfile && pnpm -r build && pnpm -r test && pnpm demo` (after the one-time `pnpm exec playwright install chromium`); `pnpm audit --audit-level=high` reports nothing; ESLint is clean.
+Network capture plus security and privacy hardening. Verified from a fresh `git clone`: `pnpm install --frozen-lockfile && pnpm -r build && pnpm -r test && pnpm demo` (after the one-time `pnpm --filter @steplight/extension exec playwright install chromium`); `pnpm audit --audit-level=high` reports nothing; ESLint is clean.
 
 | Part | Status |
 |---|---|
@@ -48,7 +56,7 @@ About 330 of these are security or privacy tests (negative cases included): `cor
 5. Python SDK / Browser Use integration emitting the same run format (and policy).
 
 Round 1 (MVP) and Round 2 (store readiness, polish, developer features) are complete and committed. The acceptance command was verified from a fresh `git clone`:
-`pnpm install && pnpm -r build && pnpm -r test && pnpm demo` (all green; after a one-time `pnpm exec playwright install chromium`).
+`pnpm install && pnpm -r build && pnpm -r test && pnpm demo` (all green; after a one-time `pnpm --filter @steplight/extension exec playwright install chromium`).
 
 ## Round 2 status
 
@@ -77,7 +85,7 @@ Round 1 (MVP) and Round 2 (store readiness, polish, developer features) are comp
 
 ```bash
 pnpm install
-pnpm exec playwright install chromium     # one-time
+pnpm --filter @steplight/extension exec playwright install chromium     # one-time
 pnpm -r build && pnpm -r test
 pnpm demo && pnpm view                    # http://localhost:4777
 pnpm --filter @steplight/demo-agent redteam-demo && node packages/cli/dist/bin.js redteam report

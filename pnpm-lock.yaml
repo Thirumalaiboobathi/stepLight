@@ -50,6 +50,22 @@ importers:
 
   examples/fixtures-site: {}
 
+  packages/check-action:
+    dependencies:
+      '@steplight/cli':
+        specifier: workspace:*
+        version: link:../cli
+      '@steplight/core':
+        specifier: workspace:*
+        version: link:../core
+      yaml:
+        specifier: ^2.9.1
+        version: 2.9.1
+    devDependencies:
+      esbuild:
+        specifier: ^0.25.12
+        version: 0.25.12
+
   packages/cli:
     dependencies:
       '@steplight/core':
