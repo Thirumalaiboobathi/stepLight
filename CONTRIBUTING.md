@@ -72,3 +72,16 @@ Attack pages live in `packages/redteam/src/attacks.ts`.
 ## Reporting security issues
 
 Please do not open a public issue for a vulnerability in Steplight itself. Use GitHub's private vulnerability reporting on the repository. New *attack patterns* that Steplight misses are welcome as public issues (use the "New attack pattern" template).
+
+## Security-sensitive changes
+
+Steplight handles browsing data, so some changes get extra care. Before opening a PR that touches any of the following,
+read [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) and add a test that proves the control still holds (including a negative test):
+
+- rendering of recorded text in a viewer or report (text nodes only, never `innerHTML`), or any CSP;
+- redaction, the never-capture field rules (`packages/core/src/neverCapture.ts`; the page scripts repeat the rule inline and a test keeps them in sync) or capture levels;
+- the CLI server (token, Host/Origin checks, schemas, limits) or extension message handling (`validate.ts`);
+- encryption, exports, policy or the audit log;
+- workflows: every `uses:` must be pinned to a commit SHA with a version comment and permissions must stay minimal (`packages/cli/src/supplychain.test.ts` enforces this).
+
+New runtime dependencies need a reason in `DECISIONS.md`. Report vulnerabilities privately (see [SECURITY.md](SECURITY.md)).
