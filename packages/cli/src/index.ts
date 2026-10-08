@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { DEFAULT_RUNS_DIR, formatTokens, summarizeTokens, clearRuns, exportRunOtlp, generatePlaywrightTest, readRun, DEFAULT_OTLP_ENDPOINT } from "@steplight/core/node";
+import { renderStoredReport } from "./reportCommand.js";
 import { runCheck } from "./checkCommand.js";
 import { registerRedteam } from "./redteamCommand.js";
 import type { CheckFormat } from "./checkFormats.js";
@@ -149,6 +150,24 @@ export function buildProgram(): Command {
     });
 
   program
+    .command("report <runId>")
+    .description("Write a single-file, self-contained HTML report of a run (share it or attach it to an issue)")
+    .option("-o, --out <file>", "output file (default: steplight-<runId>.html)")
+    .option("--diff <runId>", "also include a comparison with this run")
+    .option("-d, --dir <dir>", "runs directory", process.env.STEPLIGHT_DIR ?? DEFAULT_RUNS_DIR)
+    .action(async (runId: string, opts: { out?: string; diff?: string; dir: string }) => {
+      try {
+        const html = await renderStoredReport(opts.dir, runId, opts.diff);
+        const out = path.resolve(opts.out ?? `steplight-${runId}.html`);
+        await writeFile(out, html);
+        console.log(`Wrote ${out} (${(Buffer.byteLength(html) / 1024).toFixed(0)} KB). It is self-contained and makes no network requests.`);
+      } catch (err) {
+        console.error(`steplight: ${err instanceof Error ? err.message : String(err)}`);
+        process.exitCode = 1;
+      }
+    });
+
+  program
     .command("tokens <runId>")
     .description("Estimated token cost of a run's page reads and its most expensive pages (chars/4 heuristic)")
     .option("--json", "print as JSON")
@@ -176,3 +195,4 @@ export type { IngestMessage, ServerOptions } from "./server.js";
 export { diffStored, formatDiff } from "./diffCommand.js";
 export { runCheck } from "./checkCommand.js";
 export { formatCheck } from "./checkFormats.js";
+export { loadBundle, renderStoredReport } from "./reportCommand.js";

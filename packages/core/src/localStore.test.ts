@@ -154,3 +154,16 @@ describe("run bundles", () => {
     expect(back.run.steps[0]!.request!.bodyPreview).toBe("e=[REDACTED:email]");
   });
 });
+
+describe("bundle redaction of run-level fields", () => {
+  it("redacts the task and meta values on create and on parse", () => {
+    const run: Run = { id: "r", task: "Book for jane@example.com", startedAt: 1, status: "success", meta: { owner: "bob@example.com" }, steps: [] };
+    const made = createBundle(run);
+    expect(made.run.task).toBe("Book for [REDACTED:email]");
+    expect(made.run.meta["owner"]).toBe("[REDACTED:email]");
+    const raw = JSON.stringify({ ...made, run: { ...made.run, task: "again jane@example.com", meta: { k: "sk-abcdefghijklmnopqrstuv" } } });
+    const parsed = parseBundle(raw);
+    expect(parsed.run.task).toBe("again [REDACTED:email]");
+    expect(parsed.run.meta["k"]).toBe("[REDACTED:api_key]");
+  });
+});

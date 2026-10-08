@@ -1,5 +1,5 @@
 import { isSafeId } from "./ids.js";
-import { sanitizeSnapshot } from "./redact.js";
+import { redactText, sanitizeSnapshot } from "./redact.js";
 import { sanitizeStep } from "./sanitize.js";
 import type { Run, RunStatus, Step } from "./types.js";
 
@@ -27,9 +27,13 @@ export function createBundle(run: Run, snapshots: Record<string, string> = {}): 
   return {
     format: "steplight-run",
     version: 1,
-    run: { ...run, steps: run.steps.map(sanitizeStep) },
+    run: { ...run, task: redactText(run.task), meta: redactMeta(run.meta), steps: run.steps.map(sanitizeStep) },
     snapshots: safeSnaps,
   };
+}
+
+function redactMeta(meta: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(meta).map(([k, v]) => [k, redactText(String(v))]));
 }
 
 function fail(reason: string): never {
@@ -78,10 +82,10 @@ export function parseBundle(text: string): RunBundle {
     else delete step.snapshotRef;
     steps.push(step);
   }
-  const meta = isObject(run["meta"]) ? (run["meta"] as Record<string, string>) : {};
+  const meta = isObject(run["meta"]) ? redactMeta(run["meta"] as Record<string, string>) : {};
   const out: Run = {
     id: run["id"],
-    task: String(run["task"]),
+    task: redactText(String(run["task"])),
     startedAt: run["startedAt"],
     status: run["status"] as RunStatus,
     steps,

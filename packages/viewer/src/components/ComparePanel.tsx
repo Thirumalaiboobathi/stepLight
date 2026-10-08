@@ -26,9 +26,19 @@ function Cell({ step, status, side }: { step?: Step; status: AlignedPair["status
 }
 
 /** Compare the selected run (A) with another run (B): summary, aligned steps, text diff. */
-export function ComparePanel({ runA, runs }: { runA: Run; runs: RunSummary[] }) {
+export function ComparePanel(props: {
+  runA: Run;
+  runs: RunSummary[];
+  /** Selected run B (controlled by the parent so exports can include the comparison). */
+  bId?: string;
+  onBChange: (id: string) => void;
+}) {
+  const { runA, runs, bId, onBChange } = props;
   const others = runs.filter((r) => r.id !== runA.id);
-  const [bId, setBId] = useState<string | undefined>(others[0]?.id);
+  const effectiveB = bId && others.some((r) => r.id === bId) ? bId : others[0]?.id;
+  useEffect(() => {
+    if (effectiveB && effectiveB !== bId) onBChange(effectiveB);
+  }, [effectiveB, bId, onBChange]);
   const [runB, setRunB] = useState<Run | undefined>();
   const [diff, setDiff] = useState<RunDiff | undefined>();
   const [error, setError] = useState<string | undefined>();
@@ -37,10 +47,10 @@ export function ComparePanel({ runA, runs }: { runA: Run; runs: RunSummary[] }) 
     setRunB(undefined);
     setDiff(undefined);
     setError(undefined);
-    if (!bId) return;
+    if (!effectiveB) return;
     let live = true;
     (async () => {
-      const b = await fetchRun(bId);
+      const b = await fetchRun(effectiveB);
       const first = diffRuns(runA, b);
       const d = first.divergence;
       if (!d) return live && (setRunB(b), setDiff(first));
@@ -57,7 +67,7 @@ export function ComparePanel({ runA, runs }: { runA: Run; runs: RunSummary[] }) 
     return () => {
       live = false;
     };
-  }, [runA, bId]);
+  }, [runA, effectiveB]);
 
   if (others.length === 0) {
     return <p className="p-6 text-sm text-slate-500 dark:text-slate-400">Record another run to compare against.</p>;
@@ -69,8 +79,8 @@ export function ComparePanel({ runA, runs }: { runA: Run; runs: RunSummary[] }) 
         <span className="font-medium">Compare with (B):</span>
         <select
           data-testid="compare-select"
-          value={bId}
-          onChange={(e) => setBId(e.target.value)}
+          value={effectiveB}
+          onChange={(e) => onBChange(e.target.value)}
           className="min-w-0 max-w-full rounded-lg border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
         >
           {others.map((r) => (

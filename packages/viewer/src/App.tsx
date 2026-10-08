@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "reac
 import type { Run, RunSummary } from "@steplight/core";
 import { buildBundle, copyText, downloadText, fetchRun, fetchRuns, importRunFile } from "./api";
 import { ComparePanel } from "./components/ComparePanel";
-import { generatePlaywrightTest } from "@steplight/core";
+import { generatePlaywrightTest, renderHtmlReport } from "@steplight/core";
 import { Logo } from "./components/Logo";
 import { firstFlaggedIndex } from "./format";
 import { RunList } from "./components/RunList";
@@ -32,6 +32,7 @@ export default function App() {
   const [dark, setDark] = useState(initialDark);
   const [error, setError] = useState<string | undefined>();
   const [compare, setCompare] = useState(false);
+  const [compareId, setCompareId] = useState<string | undefined>();
   const [notice, setNotice] = useState<string | undefined>();
   const fileRef = useRef<HTMLInputElement>(null);
   const autoIndexFor = useRef<string | undefined>(undefined);
@@ -130,6 +131,18 @@ export default function App() {
       setNotice(`Export failed: ${(e as Error).message}`);
     }
   };
+  const exportReport = async () => {
+    if (!run) return;
+    try {
+      const bundle = await buildBundle(run);
+      const other = compare && compareId && compareId !== run.id ? await buildBundle(await fetchRun(compareId)) : undefined;
+      const html = renderHtmlReport(bundle, { compare: other });
+      downloadText(`steplight-report-${run.id}.html`, html, "text/html");
+      setNotice(other ? "Exported a self-contained HTML report including the comparison." : "Exported a self-contained HTML report.");
+    } catch (e) {
+      setNotice(`Report export failed: ${(e as Error).message}`);
+    }
+  };
   const copyTest = async () => {
     if (!run) return;
     try {
@@ -204,6 +217,15 @@ export default function App() {
             Copy as Playwright test
           </button>
           <button
+            data-testid="export-html"
+            onClick={() => void exportReport()}
+            disabled={!run}
+            title="One self-contained HTML file with the timeline, flags and details"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-40 dark:border-slate-700"
+          >
+            Export HTML report
+          </button>
+          <button
             data-testid="export"
             onClick={() => void exportJson()}
             disabled={!run}
@@ -266,7 +288,7 @@ export default function App() {
               </div>
               {!compare && <TokenSummary run={run} onSelect={jump} />}
               {compare ? (
-                <ComparePanel runA={run} runs={runs} />
+                <ComparePanel runA={run} runs={runs} bId={compareId} onBChange={setCompareId} />
               ) : (
                 <Timeline
                   run={run}

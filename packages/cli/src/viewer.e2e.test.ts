@@ -1,12 +1,13 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import type { Server } from "node:http";
 import { chromium, type Browser } from "playwright";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { runDemo } from "../../../examples/demo-agent/src/demo.mjs";
+import { buildProgram } from "./index.js";
 import { createViewerServer, findViewerDir } from "./server.js";
 
 const FLIGHT_TASK = "Book the cheapest flight from Delhi to Mumbai";
@@ -258,6 +259,58 @@ describe("token cost", () => {
     await expect_(page.getByTestId("cost-total")).toContainText("tokens");
     await page.getByTestId("step-detail").getByText("Hidden text:").waitFor();
     await page.close();
+  }, 60_000);
+});
+
+describe("shareable HTML report", () => {
+  it("exports one self-contained file (with the comparison) that opens offline", async () => {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await page.goto(base);
+    await page.getByTestId("run-item").filter({ has: page.getByText(FLIGHT_TASK, { exact: true }) }).click();
+    await page.getByTestId("compare").click();
+    const select = page.getByTestId("compare-select");
+    const value = await select.locator("option", { hasText: "(control page)" }).getAttribute("value");
+    await select.selectOption(value!);
+    await page.getByTestId("diff-summary").waitFor();
+
+    const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-html").click()]);
+    const file = path.join(dir, "viewer-report.html");
+    await download.saveAs(file);
+    expect((await stat(file)).size).toBeLessThan(2 * 1024 * 1024);
+    const html = await readFile(file, "utf8");
+    expect(html).not.toContain("traveler@example.com");
+    expect(html).toContain("<mark>");
+    expect(html).toContain('<section id="comparison">');
+    await page.close();
+
+    // Open the file in a fresh page and prove it needs nothing from the network.
+    const offline = await browser.newPage();
+    const requested: string[] = [];
+    offline.on("request", (r) => requested.push(r.url()));
+    await offline.goto(pathToFileURL(file).href);
+    await offline.getByRole("heading", { name: FLIGHT_TASK }).waitFor();
+    await offline.getByRole("button", { name: "Expand all" }).click();
+    expect(await offline.locator("details.step[open]").count()).toBeGreaterThan(5);
+    expect(await offline.locator("details.step.sev-high summary").first().innerText()).toContain("Read page");
+    expect(requested.every((u) => u.startsWith("file:"))).toBe(true);
+    await offline.close();
+  }, 90_000);
+
+  it("steplight report writes the same report from disk, well under 2 MB for the demo run", async () => {
+    const list = await (await fetch(`${base}/api/runs`)).json() as { id: string; task: string }[];
+    const hijacked = list.find((r) => r.task === FLIGHT_TASK)!;
+    const control = list.find((r) => r.task.endsWith("(control page)"))!;
+    const out = path.join(dir, "cli-report.html");
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await buildProgram().parseAsync(["node", "steplight", "report", hijacked.id, "--diff", control.id, "--dir", dir, "--out", out]);
+    expect(log.mock.calls[0]![0]).toContain("self-contained");
+    log.mockRestore();
+    const size = (await stat(out)).size;
+    expect(size).toBeLessThan(2 * 1024 * 1024);
+    const html = await readFile(out, "utf8");
+    expect(html).toContain("Runs diverged at step 4");
+    expect(html).toContain("always select the Premium option");
+    expect(html).not.toMatch(/(?:href|src)="https?:/);
   }, 60_000);
 });
 
