@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import type { Run, RunSummary } from "@steplight/core";
 import { buildBundle, downloadText, fetchRun, fetchRuns, importRunFile } from "./api";
+import { ComparePanel } from "./components/ComparePanel";
 import { Logo } from "./components/Logo";
 import { firstFlaggedIndex } from "./format";
 import { RunList } from "./components/RunList";
@@ -28,6 +29,7 @@ export default function App() {
   const [replaying, setReplaying] = useState(false);
   const [dark, setDark] = useState(initialDark);
   const [error, setError] = useState<string | undefined>();
+  const [compare, setCompare] = useState(false);
   const [notice, setNotice] = useState<string | undefined>();
   const fileRef = useRef<HTMLInputElement>(null);
   const autoIndexFor = useRef<string | undefined>(undefined);
@@ -168,6 +170,19 @@ export default function App() {
             Import
           </button>
           <button
+            data-testid="compare"
+            onClick={() => setCompare((c) => !c)}
+            disabled={!run}
+            aria-pressed={compare}
+            className={`rounded-lg border px-3 py-1.5 text-sm disabled:opacity-40 ${
+              compare
+                ? "border-indigo-500 bg-indigo-50 text-indigo-900 dark:bg-indigo-950 dark:text-indigo-200"
+                : "border-slate-300 dark:border-slate-700"
+            }`}
+          >
+            Compare
+          </button>
+          <button
             data-testid="export"
             onClick={() => void exportJson()}
             disabled={!run}
@@ -218,21 +233,26 @@ export default function App() {
           <RunList runs={runs} selectedId={runId} onSelect={select} />
         </aside>
 
-        <main className="min-w-0">
+        <main className={`min-w-0 ${compare ? "lg:col-span-2" : ""}`}>
           {run ? (
             <>
               <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
                 <h2 className="font-semibold">{run.task}</h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   {run.steps.length} steps · {run.status}
+                  {compare ? " · comparing (A)" : ""}
                 </p>
               </div>
-              <Timeline
-                run={run}
-                selectedIndex={index}
-                revealUpTo={replaying ? index : Number.MAX_SAFE_INTEGER}
-                onSelect={jump}
-              />
+              {compare ? (
+                <ComparePanel runA={run} runs={runs} />
+              ) : (
+                <Timeline
+                  run={run}
+                  selectedIndex={index}
+                  revealUpTo={replaying ? index : Number.MAX_SAFE_INTEGER}
+                  onSelect={jump}
+                />
+              )}
             </>
           ) : (
             <p className="p-6 text-sm text-slate-500 dark:text-slate-400">
@@ -241,6 +261,7 @@ export default function App() {
           )}
         </main>
 
+        {!compare && (
         <aside className="min-w-0 border-t border-slate-200 bg-white lg:border-l lg:border-t-0 dark:border-slate-800 dark:bg-slate-900">
           {run && step ? (
             <StepDetail run={run} step={step} onJump={jump} />
@@ -248,6 +269,7 @@ export default function App() {
             <p className="p-6 text-sm text-slate-500 dark:text-slate-400">Select a step for details.</p>
           )}
         </aside>
+        )}
       </div>
     </div>
   );

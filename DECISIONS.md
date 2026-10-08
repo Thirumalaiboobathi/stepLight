@@ -47,3 +47,10 @@ Choices made where the spec was ambiguous. Simplest reasonable option wins.
 38. **Diagnosis is computed from the live DOM at failure time** (covered = `elementFromPoint` at the element centre, disabled, hidden, off-screen, pointer-events, match count). "Similar selectors" come from interactive elements found then, ranked by bigram similarity of selector and text. Engines other than CSS and `text=` are reported as not evaluable.
 39. **The extension cannot see the agent's failed actions** (they never reach the page), so the failure explainer is SDK-only; the extension still gets stuck-loop detection, and its viewer renders diagnoses from imported SDK runs.
 40. **The demo's "control" run gets its own task title** ("… (control page)") so run lists and tests can tell it apart from the hijacked run.
+
+### C2 run diff
+41. **Alignment key = kind + URL *path* + target** (selector, else text). Host, port, query string, ids and timestamps are ignored so runs from different servers/sessions line up. `agent_note` steps are excluded from alignment (they are reasoning, not behaviour) but still count in step numbers.
+42. **LCS alignment** (quadratic table, falls back to position-wise matching above 4M cells) so an inserted cookie-banner click doesn't mark every later step as changed. Adjacent unmatched steps from both runs are paired as "changed".
+43. **"Hidden text" attribution** in the summary: the side whose last page read before the divergence has a medium+ `hidden_instruction` flag while the other's has none.
+44. **`steplight diff` exits 1 when runs differ** (like `diff`), 2 on errors; `--json` prints the full RunDiff.
+45. **The demo's control run** is the same page served as `/flights.html?hidden=0` (injection stripped server-side), so both runs share a URL path and the diff lands on the click rather than the first navigation.

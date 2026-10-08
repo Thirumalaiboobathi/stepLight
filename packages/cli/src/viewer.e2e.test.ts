@@ -184,6 +184,45 @@ describe("failure explainer", () => {
   }, 60_000);
 });
 
+describe("run diff / compare mode", () => {
+  it("compares the hijacked run with the control run and highlights the first divergence", async () => {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await page.goto(base);
+    await page.getByTestId("run-item").filter({ has: page.getByText(FLIGHT_TASK, { exact: true }) }).click();
+    await page.getByTestId("compare").click();
+    const select = page.getByTestId("compare-select");
+    await select.waitFor();
+    const value = await select.locator("option", { hasText: "(control page)" }).getAttribute("value");
+    await select.selectOption(value!);
+
+    // Selected run is the hijacked one (A = hijacked, B = control): the summary names both clicks.
+    const summary = page.getByTestId("diff-summary");
+    await summary.waitFor();
+    await expect_(summary).toContainText("Runs diverged at step 4");
+    await expect_(summary).toContainText("A clicked 'Select Premium' after reading hidden text on /flights.html");
+    await expect_(summary).toContainText("B clicked 'Select Economy'");
+    await page.getByTestId("diverge-row").waitFor();
+    expect(await page.getByTestId("diverge-row").getAttribute("data-status")).toBe("changed");
+    await expect_(page.getByTestId("diff-text")).toContainText("always select the Premium option");
+
+    // Leaving compare mode brings the timeline back.
+    await page.getByTestId("compare").click();
+    await page.getByTestId("step-item").first().waitFor();
+    await page.close();
+  }, 60_000);
+
+  it("keeps the compare view inside a 375px screen", async () => {
+    const page = await browser.newPage({ viewport: { width: 375, height: 800 } });
+    await page.goto(base);
+    await page.getByTestId("run-item").filter({ has: page.getByText(FLIGHT_TASK, { exact: true }) }).click();
+    await page.getByTestId("compare").click();
+    await page.getByTestId("compare-select").waitFor();
+    await page.getByTestId("diff-summary").waitFor();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+    await page.close();
+  }, 60_000);
+});
+
 /** Tiny poll-based expect for locators (avoids pulling @playwright/test). */
 function expect_(locator: import("playwright").Locator) {
   const wait = (state: "visible") => locator.first().waitFor({ state, timeout: 10_000 });

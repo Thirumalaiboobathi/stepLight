@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { steplight } from "@steplight/sdk";
 import { startFixtureSites } from "@steplight/fixtures-site";
-import { clearRuns } from "@steplight/core/node";
+import { clearRuns, diffRuns, readRun } from "@steplight/core/node";
 
 const DEMO_AGENT = "demo-scripted";
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -91,7 +91,7 @@ export async function runDemo(options = {}) {
   try {
     const flightsRunId = await bookFlight(browser, site, dir, "flights.html", TASK_FLIGHT);
     log(`flights run (hidden injection): ${flightsRunId}`);
-    const safeRunId = await bookFlight(browser, site, dir, "flights-safe.html", `${TASK_FLIGHT} (control page)`);
+    const safeRunId = await bookFlight(browser, site, dir, "flights.html?hidden=0", `${TASK_FLIGHT} (control page)`);
     log(`flights run (no injection):     ${safeRunId}`);
     const cleanRunId = await downloadReport(browser, site, dir);
     log(`clean run:                      ${cleanRunId}`);
@@ -109,7 +109,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const { dir, flightsRunId, safeRunId } = await runDemo();
     console.log(`\nRuns written to ${dir}\nView them with:  pnpm view   (then open http://localhost:4777)`);
     console.log(`Inspect: ${path.join(dir, flightsRunId)}`);
-    console.log(`Compare: steplight diff ${safeRunId} ${flightsRunId}`);
+    const diff = diffRuns(await readRun(dir, safeRunId), await readRun(dir, flightsRunId));
+    console.log(`
+Diff of the control run vs the hijacked run:
+  ${diff.summary}`);
+    console.log(`  (steplight diff ${safeRunId} ${flightsRunId})`);
   } catch (err) {
     console.error("demo failed:", err);
     process.exitCode = 1;

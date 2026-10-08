@@ -42,6 +42,11 @@ export async function startFixtureSites(options = {}) {
       if (!file.startsWith(PUBLIC_DIR + path.sep)) throw new Error("bad path");
       let content = await readFile(file, "utf8");
       content = content.replaceAll("__COLLECTOR_URL__", collectorUrl);
+      // `flights.html?hidden=0` serves the same page without the hidden injected instruction,
+      // for comparing a hijacked run with a clean one at the same URL path.
+      if (name === "flights.html" && new URL(req.url ?? "/", "http://x").searchParams.get("hidden") === "0") {
+        content = content.replace(/<div style="display: none" id="injected">[\s\S]*?<\/div>/, "");
+      }
       res.writeHead(200, { "content-type": TYPES[path.extname(file)] ?? "text/plain" });
       res.end(content);
     } catch {

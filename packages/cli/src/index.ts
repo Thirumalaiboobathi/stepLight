@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { DEFAULT_RUNS_DIR, clearRuns, exportRunOtlp, readRun, DEFAULT_OTLP_ENDPOINT } from "@steplight/core/node";
+import { diffStored, formatDiff } from "./diffCommand.js";
 import { createViewerServer, findViewerDir } from "./server.js";
 
 /** Default port of the local viewer / ingest server. */
@@ -79,7 +80,24 @@ export function buildProgram(): Command {
       console.log(`Deleted ${deleted.length} run${deleted.length === 1 ? "" : "s"}${keep ? `, kept the newest ${keep}` : ""}.`);
     });
 
+  program
+    .command("diff <runA> <runB>")
+    .description("Compare two runs: find where they first diverge and what each saw there (exit 1 if they differ)")
+    .option("--json", "print the diff as JSON")
+    .option("-d, --dir <dir>", "runs directory", process.env.STEPLIGHT_DIR ?? DEFAULT_RUNS_DIR)
+    .action(async (a: string, b: string, opts: { json?: boolean; dir: string }) => {
+      try {
+        const { diff } = await diffStored(path.resolve(opts.dir), a, b);
+        console.log(opts.json ? JSON.stringify(diff, null, 2) : formatDiff(diff));
+        if (!diff.identical) process.exitCode = 1;
+      } catch (err) {
+        console.error(`steplight: ${err instanceof Error ? err.message : String(err)}`);
+        process.exitCode = 2;
+      }
+    });
+
   return program;
 }
 export { createViewerServer, findViewerDir } from "./server.js";
 export type { IngestMessage, ServerOptions } from "./server.js";
+export { diffStored, formatDiff } from "./diffCommand.js";
