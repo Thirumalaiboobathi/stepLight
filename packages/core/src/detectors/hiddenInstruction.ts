@@ -22,6 +22,8 @@ export interface DomTextNode {
    * agents that consume raw HTML or the accessibility tree.
    */
   source?: "text" | "comment" | "attribute";
+  /** Page furniture this text belongs to (navigation, footer, cookie banner, ads, sidebar). */
+  landmark?: "nav" | "footer" | "aside" | "cookie" | "ads";
 }
 
 /** Everything the hidden-instruction detector needs about a page. */

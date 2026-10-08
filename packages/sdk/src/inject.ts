@@ -1,7 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { collectPageScan, type PageScan } from "@steplight/core";
 
 /** Name of the Playwright binding the injected script reports through. */
 export const BINDING_NAME = "__steplightEmit";
+
+/** A page scan taken inside the page when it finished loading. */
+export interface ScanEvent {
+  type: "scan";
+  scan: PageScan;
+}
 
 /** An interaction reported by the injected page script. */
 export interface PageEvent {
@@ -135,4 +142,22 @@ export function installPageListeners(bindingName: string): void {
   } catch {
     /* fail open */
   }
+}
+
+/**
+ * Source of an init script that runs `collectPageScan` when the document has loaded and reports
+ * the result through the binding. Built from the real function so there is one implementation.
+ */
+export function scanOnLoadScript(): string {
+  return `(() => {
+  const scan = ${collectPageScan.toString()};
+  const emit = () => {
+    try {
+      const f = window[${JSON.stringify(BINDING_NAME)}];
+      if (typeof f === "function") f({ type: "scan", scan: scan() });
+    } catch (e) { /* fail open */ }
+  };
+  if (document.readyState === "complete") emit();
+  else window.addEventListener("load", emit, { once: true });
+})();`;
 }

@@ -45,6 +45,7 @@ export function emitRunSpans(run: Run, tracer: Tracer): void {
     if (worst) attributes["steplight.flag.max_severity"] = worst;
     if (step.targetText) attributes["steplight.step.target_text"] = step.targetText;
     if (step.causedBy) attributes["steplight.step.caused_by"] = step.causedBy;
+    if (step.tokens) attributes["steplight.step.estimated_tokens"] = step.tokens.total;
     if (step.request) attributes["http.request.method"] = step.request.method;
 
     const span = tracer.startSpan(

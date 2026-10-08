@@ -170,7 +170,7 @@ describe("otel", () => {
       status: "success",
       meta: {},
       steps: [
-        step({ index: 0, kind: "page_read", url: "https://x.test", timestamp: 1100 }),
+        step({ index: 0, kind: "page_read", url: "https://x.test", timestamp: 1100, tokens: { total: 321, visibleChars: 1000, hiddenChars: 284, boilerplateChars: 400, boilerplateShare: 0.31, estimated: true } }),
         step({
           index: 1,
           kind: "click",
@@ -195,6 +195,8 @@ describe("otel", () => {
     const click = spans.find((s) => s.name === "steplight.step.click")!;
     expect(click.attributes["steplight.flag.count"]).toBe(1);
     expect(click.attributes["steplight.flag.max_severity"]).toBe("high");
+    expect(spans.find((s) => s.name === "steplight.step.page_read")!.attributes["steplight.step.estimated_tokens"]).toBe(321);
+    expect(click.attributes["steplight.step.estimated_tokens"]).toBeUndefined();
     expect(click.parentSpanContext?.spanId).toBe(root.spanContext().spanId);
     expect(click.events[0]?.name).toBe("steplight.flag");
     expect(spans.find((s) => s.name === "steplight.step.page_read")!.attributes["url.full"]).toBe("https://x.test");

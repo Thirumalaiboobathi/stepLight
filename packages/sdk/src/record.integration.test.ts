@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { readRun, readSnapshot, type Run } from "@steplight/core/node";
+import { readRun, readSnapshot, summarizeTokens, type Run } from "@steplight/core/node";
 import { chromium, type Browser } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startFixtureSites, type FixtureSites } from "../../../examples/fixtures-site/server.mjs";
@@ -87,5 +87,28 @@ describe("record() against the fixtures site", () => {
     const all = run.steps.flatMap((s) => s.flags);
     expect(all.filter((f) => f.severity === "high" || f.severity === "critical")).toEqual([]);
     expect(run.steps.some((s) => s.kind === "click" && s.targetText === "Download")).toBe(true);
+  }, 60_000);
+});
+
+describe("token cost estimates", () => {
+  it("estimates tokens per page read and attributes hidden text and boilerplate", async () => {
+    const page = await browser.newPage();
+    const handle = await record(page, { task: "Read the review", dir });
+    await page.goto(`${site.url}/noisy.html`);
+    await page.goto(`${site.url}/clean.html`);
+    await handle.end("success");
+    await page.close();
+    const run = await readRun(dir, handle.id);
+    const [noisy, clean] = run.steps.filter((s) => s.kind === "page_read");
+    expect(noisy!.tokens).toMatchObject({ estimated: true });
+    expect(noisy!.tokens!.total).toBeGreaterThan(150);
+    expect(noisy!.tokens!.hiddenChars).toBeGreaterThan(100); // the display:none filler
+    expect(noisy!.tokens!.boilerplateShare).toBeGreaterThan(0.45); // nav, ad, aside, footer, cookie banner
+    expect(clean!.tokens!.boilerplateShare).toBe(0);
+    expect(noisy!.tokens!.total).toBeGreaterThan(clean!.tokens!.total);
+    // Run-level summary names the noisy page as the most expensive.
+    const summary = summarizeTokens(run);
+    expect(summary.pages).toBe(2);
+    expect(summary.top[0]!.url).toContain("noisy.html");
   }, 60_000);
 });

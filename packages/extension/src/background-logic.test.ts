@@ -223,6 +223,14 @@ describe("events", () => {
     expect(session.pages.length).toBeLessThanOrEqual(5);
   });
 
+  it("keeps the token estimate of a page read on its step", () => {
+    const session: Session = { runId: "r1", task: "t", startedAt: 0, steps: [], pages: [], mode: "connected" };
+    const tokens = { total: 250, visibleChars: 800, hiddenChars: 200, boilerplateChars: 300, boilerplateShare: 0.3, estimated: true as const };
+    const out = recordEvent(session, read({ tokens }));
+    const readStep = (out.find((m) => m.type === "step" && m.step.kind === "page_read") as Extract<IngestMessage, { type: "step" }>).step;
+    expect(readStep.tokens).toEqual(tokens);
+  });
+
   it("flags a stuck loop (same click 3×) in the extension too", () => {
     const session: Session = { runId: "r1", task: "t", startedAt: 0, steps: [], pages: [], mode: "connected" };
     const click = (t: number): PageEventMsg => ({ kind: "click", url: "http://shop.test/cart", selector: "button#pay", text: "Pay", timestamp: t });

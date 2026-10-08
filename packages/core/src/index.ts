@@ -16,3 +16,4 @@ export * from "./diagnose.js";
 export * from "./diff.js";
 export * from "./repro.js";
 export * from "./check.js";
+export * from "./tokens.js";

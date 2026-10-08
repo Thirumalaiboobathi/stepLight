@@ -6,6 +6,7 @@ import {
   buildDiagnosis,
   collectFailureContext,
   collectPageScan,
+  computeTokenStats,
   exportRunOtlp,
   hiddenInstruction,
   inferCausedBy,
@@ -22,7 +23,7 @@ import {
   type Step,
   type StepKind,
 } from "@steplight/core/node";
-import { BINDING_NAME, installPageListeners, type PageEvent } from "./inject.js";
+import { BINDING_NAME, installPageListeners, scanOnLoadScript, type PageEvent, type ScanEvent } from "./inject.js";
 
 /** Options for {@link record}. */
 export interface RecordOptions {
@@ -126,13 +127,20 @@ class Recorder implements RunHandle {
     this.writer = await RunWriter.create(this.root, this.run);
     const page = this.page;
 
-    await page.exposeBinding(BINDING_NAME, (source, event: PageEvent) => {
+    await page.exposeBinding(BINDING_NAME, (source, event: PageEvent | ScanEvent) => {
       if (source.frame !== page.mainFrame()) return;
       const ts = Date.now();
+      if (event.type === "scan") {
+        this.enqueue("page_read", () => this.onScan(event.scan, ts));
+        return;
+      }
       const url = page.url();
       this.enqueue("event", () => this.onPageEvent(event, ts, url));
     });
     await page.addInitScript(installPageListeners, BINDING_NAME);
+    // Scan each page *inside* the page at load time and push the result through the binding, so
+    // an agent that navigates away immediately after goto() cannot race the snapshot.
+    await page.addInitScript({ content: scanOnLoadScript() });
     await page.evaluate(installPageListeners, BINDING_NAME).catch(() => undefined);
 
     page.on("framenavigated", (frame: Frame) => {
@@ -144,10 +152,6 @@ class Recorder implements RunHandle {
         this.lastNavUrl = url;
         await this.addStep("navigate", ts, { url });
       });
-    });
-    page.on("load", () => {
-      const ts = Date.now();
-      this.enqueue("page_read", () => this.onLoad(ts));
     });
     page.on("request", (req: Request) => this.onRequest(req));
     page.on("download", (dl) => {
@@ -171,12 +175,13 @@ class Recorder implements RunHandle {
       this.enqueue("initial", async () => {
         this.lastNavUrl = page.url();
         await this.addStep("navigate", ts, { url: page.url() });
-        await this.onLoad(ts);
+        await this.captureNow(ts);
       });
     }
   }
 
-  private async onLoad(ts: number): Promise<void> {
+  /** Scan the page that is already loaded when recording starts. */
+  private async captureNow(ts: number): Promise<void> {
     let scan: PageScan;
     try {
       scan = await this.page.evaluate(collectPageScan);
@@ -185,9 +190,18 @@ class Recorder implements RunHandle {
       if (!/context was destroyed|navigat|Target (page|closed)/i.test(String(err))) logError("snapshot", err);
       return;
     }
+    await this.onScan(scan, ts);
+  }
+
+  private async onScan(scan: PageScan, ts: number): Promise<void> {
     this.pages.push({ url: scan.url, text: scan.text });
     const flags = hiddenInstruction(scan.dom);
-    await this.addStep("page_read", ts, { url: scan.url, targetText: scan.title, flags }, scan.text);
+    await this.addStep(
+      "page_read",
+      ts,
+      { url: scan.url, targetText: scan.title, flags, tokens: computeTokenStats(scan) },
+      scan.text,
+    );
     this.scheduleRescan(scan.url, new Set(flags.map((f) => f.evidence)));
   }
 
@@ -210,7 +224,7 @@ class Recorder implements RunHandle {
     await this.addStep(
       "page_read",
       Date.now(),
-      { url: scan.url, targetText: `${scan.title} (content changed after load)`, flags: fresh },
+      { url: scan.url, targetText: `${scan.title} (content changed after load)`, flags: fresh, tokens: computeTokenStats(scan) },
       scan.text,
     );
   }

@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import { DEFAULT_RUNS_DIR, clearRuns, exportRunOtlp, generatePlaywrightTest, readRun, DEFAULT_OTLP_ENDPOINT } from "@steplight/core/node";
+import { DEFAULT_RUNS_DIR, formatTokens, summarizeTokens, clearRuns, exportRunOtlp, generatePlaywrightTest, readRun, DEFAULT_OTLP_ENDPOINT } from "@steplight/core/node";
 import { runCheck } from "./checkCommand.js";
 import { registerRedteam } from "./redteamCommand.js";
 import type { CheckFormat } from "./checkFormats.js";
@@ -146,6 +146,25 @@ export function buildProgram(): Command {
       });
       (exitCode === 2 ? console.error : console.log)(output);
       process.exitCode = exitCode;
+    });
+
+  program
+    .command("tokens <runId>")
+    .description("Estimated token cost of a run's page reads and its most expensive pages (chars/4 heuristic)")
+    .option("--json", "print as JSON")
+    .option("-d, --dir <dir>", "runs directory", process.env.STEPLIGHT_DIR ?? DEFAULT_RUNS_DIR)
+    .action(async (runId: string, opts: { json?: boolean; dir: string }) => {
+      try {
+        const s = summarizeTokens(await readRun(path.resolve(opts.dir), runId));
+        if (opts.json) return void console.log(JSON.stringify(s, null, 2));
+        if (s.pages === 0) return void console.log("No token estimates in this run (record page reads with the current SDK).");
+        console.log(`~${formatTokens(s.total)} tokens (estimate) over ${s.pages} page reads; ${Math.round(s.boilerplateShare * 100)}% boilerplate, ${formatTokens(Math.ceil(s.hiddenChars / 4))} hidden`);
+        console.log("Most expensive pages:");
+        for (const p of s.top) console.log(`  ${formatTokens(p.tokens).padStart(6)}  #${p.index}  ${p.url ?? ""}  (${Math.round(p.boilerplateShare * 100)}% boilerplate)`);
+      } catch (err) {
+        console.error(`steplight: ${err instanceof Error ? err.message : String(err)}`);
+        process.exitCode = 1;
+      }
     });
 
   registerRedteam(program, process.env.STEPLIGHT_DIR ?? DEFAULT_RUNS_DIR);

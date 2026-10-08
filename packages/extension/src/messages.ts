@@ -1,8 +1,17 @@
-import type { Flag } from "@steplight/core";
+import type { Flag, PageTokens } from "@steplight/core";
 
 /** An observation reported by the content script. */
 export type PageEventMsg =
-  | { kind: "page_read"; url: string; title: string; text: string; flags: Flag[]; timestamp: number }
+  | {
+      kind: "page_read";
+      url: string;
+      title: string;
+      text: string;
+      flags: Flag[];
+      /** Token cost estimate of the page. */
+      tokens?: PageTokens;
+      timestamp: number;
+    }
   | { kind: "click"; url: string; selector: string; text: string; timestamp: number }
   | { kind: "type"; url: string; selector: string; text: string; timestamp: number }
   | {

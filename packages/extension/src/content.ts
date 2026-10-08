@@ -1,4 +1,4 @@
-import { collectPageScan, hiddenInstruction } from "@steplight/core";
+import { collectPageScan, computeTokenStats, hiddenInstruction } from "@steplight/core";
 import type { ExtensionMessage, PageEventMsg, StatusReply } from "./messages.js";
 
 /* Runs inside web pages. Never throws into the page; stops itself when not recording. */
@@ -127,6 +127,7 @@ function main(): void {
       title: scan.title,
       text: scan.text,
       flags,
+      tokens: computeTokenStats(scan),
       timestamp: Date.now(),
     });
     // Scan again shortly after load to catch instructions injected by scripts (setTimeout).
@@ -143,6 +144,7 @@ function main(): void {
             title: `${again.title} (content changed after load)`,
             text: again.text,
             flags: fresh,
+            tokens: computeTokenStats(again),
             timestamp: Date.now(),
           });
         }

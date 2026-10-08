@@ -65,7 +65,12 @@ function stepFromEvent(
   switch (event.kind) {
     case "page_read":
       return {
-        step: base("page_read", { url: event.url, targetText: event.title, flags: [...event.flags] }),
+        step: base("page_read", {
+          url: event.url,
+          targetText: event.title,
+          flags: [...event.flags],
+          ...(event.tokens ? { tokens: event.tokens } : {}),
+        }),
         snapshot: event.text,
       };
     case "click":

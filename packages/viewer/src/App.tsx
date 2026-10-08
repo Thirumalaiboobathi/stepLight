@@ -7,6 +7,7 @@ import { Logo } from "./components/Logo";
 import { firstFlaggedIndex } from "./format";
 import { RunList } from "./components/RunList";
 import { StepDetail } from "./components/StepDetail";
+import { TokenSummary } from "./components/TokenSummary";
 import { Timeline } from "./components/Timeline";
 
 const REPLAY_INTERVAL_MS = 800;
@@ -263,6 +264,7 @@ export default function App() {
                   {compare ? " · comparing (A)" : ""}
                 </p>
               </div>
+              {!compare && <TokenSummary run={run} onSelect={jump} />}
               {compare ? (
                 <ComparePanel runA={run} runs={runs} />
               ) : (

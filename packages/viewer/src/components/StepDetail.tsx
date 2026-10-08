@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { Run, Step } from "@steplight/core";
 import { fetchSnapshot } from "../api";
+import { formatTokens } from "@steplight/core";
 import { KIND_ICON, SEVERITY_STYLE, clock, describeStep } from "../format";
 import { SeverityBadge } from "./SeverityBadge";
 
@@ -94,6 +95,38 @@ function FailurePanel({ step }: { step: Step }) {
   );
 }
 
+/** Estimated context cost of a page read: tokens and the visible / hidden / boilerplate split. */
+function CostSection({ tokens }: { tokens: NonNullable<Step["tokens"]> }) {
+  const all = tokens.visibleChars + tokens.hiddenChars || 1;
+  const pct = (n: number) => `${Math.round((n / all) * 100)}%`;
+  return (
+    <Section title="Context cost (estimate)">
+      <p data-testid="cost-total" className="text-sm">
+        <span className="font-semibold">~{formatTokens(tokens.total)} tokens</span>{" "}
+        <span className="text-xs text-slate-500 dark:text-slate-400">estimated as characters / 4, not a real tokenizer</span>
+      </p>
+      <div className="mt-2 flex h-2 overflow-hidden rounded bg-slate-200 dark:bg-slate-700" aria-hidden>
+        <div className="bg-indigo-500" style={{ width: pct(tokens.visibleChars - Math.min(tokens.boilerplateChars, tokens.visibleChars)) }} />
+        <div className="bg-slate-400" style={{ width: pct(Math.min(tokens.boilerplateChars, tokens.visibleChars)) }} />
+        <div className="bg-orange-500" style={{ width: pct(tokens.hiddenChars) }} />
+      </div>
+      <ul className="mt-2 space-y-0.5 text-xs text-slate-600 dark:text-slate-300">
+        <li>
+          <span className="mr-1 inline-block h-2 w-2 rounded-full bg-indigo-500" /> Visible content:{" "}
+          {pct(tokens.visibleChars - Math.min(tokens.boilerplateChars, tokens.visibleChars))}
+        </li>
+        <li>
+          <span className="mr-1 inline-block h-2 w-2 rounded-full bg-slate-400" /> Boilerplate (nav, footer, cookie banner, ads):{" "}
+          {Math.round(tokens.boilerplateShare * 100)}%
+        </li>
+        <li>
+          <span className="mr-1 inline-block h-2 w-2 rounded-full bg-orange-500" /> Hidden text: {pct(tokens.hiddenChars)}
+        </li>
+      </ul>
+    </Section>
+  );
+}
+
 /** Details of the selected step: flags, causal links, request and highlighted snapshot. */
 export function StepDetail(props: { run: Run; step: Step; onJump: (index: number) => void }) {
   const { run, step } = props;
@@ -181,6 +214,8 @@ export function StepDetail(props: { run: Run; step: Step; onJump: (index: number
           )}
         </Section>
       )}
+
+      {step.tokens && <CostSection tokens={step.tokens} />}
 
       {step.snapshotRef && (
         <Section title="Page snapshot (all text the agent could read)">

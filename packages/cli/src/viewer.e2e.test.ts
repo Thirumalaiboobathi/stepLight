@@ -241,6 +241,26 @@ describe("copy as Playwright test", () => {
   }, 60_000);
 });
 
+describe("token cost", () => {
+  it("shows the run total, the most expensive pages and a per-page breakdown", async () => {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await page.goto(base);
+    await page.getByTestId("run-item").filter({ has: page.getByText(FLIGHT_TASK, { exact: true }) }).click();
+    const summary = page.getByTestId("token-summary");
+    await summary.waitFor();
+    await expect_(summary).toContainText("tokens");
+    await expect_(summary).toContainText("estimate");
+    const pages = await page.getByTestId("expensive-page").count();
+    expect(pages).toBeGreaterThanOrEqual(2);
+    expect(pages).toBeLessThanOrEqual(3);
+
+    await page.getByTestId("expensive-page").first().click();
+    await expect_(page.getByTestId("cost-total")).toContainText("tokens");
+    await page.getByTestId("step-detail").getByText("Hidden text:").waitFor();
+    await page.close();
+  }, 60_000);
+});
+
 /** Tiny poll-based expect for locators (avoids pulling @playwright/test). */
 function expect_(locator: import("playwright").Locator) {
   const wait = (state: "visible") => locator.first().waitFor({ state, timeout: 10_000 });

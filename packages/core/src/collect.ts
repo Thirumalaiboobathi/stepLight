@@ -45,6 +45,21 @@ export function collectPageScan(): PageScan {
     perElement.set(el, prev === undefined ? t : `${prev} ${t}`);
   }
 
+  /** Is this element inside navigation, footer, sidebar, a cookie banner or an ad? */
+  const landmarkOf = (el: any): "nav" | "footer" | "aside" | "cookie" | "ads" | undefined => {
+    for (let e = el; e && e.nodeType === 1 && e !== doc.body && e !== doc.documentElement; e = e.parentElement) {
+      const role = e.getAttribute("role");
+      const tag = String(e.tagName);
+      if (tag === "NAV" || role === "navigation") return "nav";
+      if (tag === "FOOTER" || role === "contentinfo") return "footer";
+      if (tag === "ASIDE" || role === "complementary") return "aside";
+      const idc = `${e.id || ""} ${typeof e.className === "string" ? e.className : ""}`.toLowerCase();
+      if (/cookie|consent|gdpr/.test(idc)) return "cookie";
+      if (/(^|[\s_-])(ads?|advert[a-z]*|sponsor[a-z]*)([\s_-]|$)/.test(idc)) return "ads";
+    }
+    return undefined;
+  };
+
   const bgOf = (el: any): string => {
     for (let e = el; e; e = e.parentElement) {
       const bg = win.getComputedStyle(e).backgroundColor as string;
@@ -88,6 +103,7 @@ export function collectPageScan(): PageScan {
       backgroundColor: bgOf(el),
       ariaHidden,
       hiddenAttr,
+      landmark: landmarkOf(el),
     });
   }
 
