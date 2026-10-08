@@ -67,13 +67,18 @@ function runEverything(text: string): void {
   sanitizeBody(text);
 }
 
-/** Best of a few runs, so a busy CI machine (or parallel test files) does not cause false alarms. */
+/**
+ * Best of a few runs, measured in CPU time of this process (not wall-clock), so a busy CI machine or
+ * other test files running in parallel (browsers!) do not cause false alarms. A catastrophic regex
+ * burns CPU, so it still shows up.
+ */
 function bestOf(runs: number, fn: () => void): number {
   let best = Infinity;
   for (let i = 0; i < runs; i++) {
-    const start = performance.now();
+    const before = process.cpuUsage();
     fn();
-    best = Math.min(best, performance.now() - start);
+    const used = process.cpuUsage(before);
+    best = Math.min(best, (used.user + used.system) / 1000);
   }
   return best;
 }
