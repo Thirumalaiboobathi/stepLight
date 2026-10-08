@@ -13,6 +13,7 @@ updates:
       semver-major-days: 7
       semver-minor-days: 7
       semver-patch-days: 4
+    # (pnpm-workspace.yaml lists temporary release-age exclusions; see DECISIONS.md 137.)
     # Majors of the build toolchain wait until after the 0.1.0 release. @types/node must keep
     # tracking the minimum supported Node (20), so its majors are never proposed.
     ignore:
