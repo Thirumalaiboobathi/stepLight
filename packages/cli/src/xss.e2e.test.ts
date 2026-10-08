@@ -113,6 +113,7 @@ describe("XSS payloads in snapshots, URLs, selectors, bodies, task titles and ev
     expect(detailText).toContain("<img src=x onerror=");
     expect(detailText).toContain("<script>window.__pwned");
     // evidence highlighting is a <mark> around a text node, not injected markup
+    await page.getByTestId("evidence").first().waitFor();
     const marks = await page.getByTestId("evidence").evaluateAll((els) => els.map((e) => ({ children: e.children.length, text: e.textContent })));
     expect(marks.length).toBeGreaterThan(0);
     for (const m of marks) expect(m.children).toBe(0);
