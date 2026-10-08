@@ -59,8 +59,7 @@ export class RunWriter {
   }
 
   private async writeMeta(): Promise<void> {
-    const { steps: _steps, ...rest } = this.run;
-    const meta = { ...rest, task: redactText(rest.task) };
+    const meta = { ...this.run, steps: undefined, task: redactText(this.run.task) };
     await fs.writeFile(path.join(this.dir, "run.json"), JSON.stringify(meta, null, 2));
   }
 

@@ -96,6 +96,18 @@ export function maskValue(value: string): string {
 }
 
 /**
+ * Evidence-safe description of a sensitive match: never reveals more than needed to
+ * recognise it (email → domain only, card → last 4, key/JWT → short prefix).
+ * @example maskSensitive({ kind: "email", value: "jane@example.com", index: 0 }) // "••••@example.com"
+ */
+export function maskSensitive(match: SensitiveMatch): string {
+  const { kind, value } = match;
+  if (kind === "email") return `••••${value.slice(value.indexOf("@"))}`;
+  if (kind === "card") return `•••• ${value.replace(/\D/g, "").slice(-4)}`;
+  return `${value.slice(0, kind === "jwt" ? 3 : 4)}…`;
+}
+
+/**
  * Truncate text to a maximum length, appending a marker when cut.
  * @example truncate("abcdef", 3) // "abc…[truncated]"
  */

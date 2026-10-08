@@ -87,9 +87,18 @@ importers:
         specifier: workspace:*
         version: link:../core
     devDependencies:
+      '@steplight/cli':
+        specifier: workspace:*
+        version: link:../cli
+      '@steplight/fixtures-site':
+        specifier: workspace:*
+        version: link:../../examples/fixtures-site
       '@types/chrome':
         specifier: ^0.3.4
         version: 0.3.4
+      playwright:
+        specifier: ^1.64.0
+        version: 1.64.0
       vite:
         specifier: ^5.4.21
         version: 5.4.21(@types/node@20.19.43)(lightningcss@1.32.0)

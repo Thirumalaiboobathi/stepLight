@@ -7,7 +7,7 @@ import { analyzeStep, inferCausedBy } from "./analyze.js";
 import { isCrossSite, registrableDomain } from "./domain.js";
 import { isSafeId, newRunId } from "./ids.js";
 import { exportRunOtlp } from "./otel/index.js";
-import { findSensitive, luhnValid, maskValue, redactText, sanitizeBody, sanitizeSnapshot } from "./redact.js";
+import { findSensitive, luhnValid, maskSensitive, maskValue, redactText, sanitizeBody, sanitizeSnapshot } from "./redact.js";
 import { maxSeverity } from "./severity.js";
 import { listRuns, readRun, readSnapshot, writeRun } from "./storage/runStore.js";
 import type { Run, Step } from "./types.js";
@@ -45,6 +45,13 @@ describe("redact", () => {
   it("masks values", () => {
     expect(maskValue("short")).toBe("••••");
     expect(maskValue("sk-abcdefghijkl")).toBe("sk-a…ijkl");
+  });
+  it("masks evidence without revealing secrets", () => {
+    const m = (kind: "email" | "card" | "api_key" | "jwt", value: string) => maskSensitive({ kind, value, index: 0 });
+    expect(m("email", "jane@example.com")).toBe("••••@example.com");
+    expect(m("card", "4242 4242 4242 4242")).toBe("•••• 4242");
+    expect(m("api_key", "sk-abcdefghijklmnop")).toBe("sk-a…");
+    expect(m("jwt", "eyJhbGciOi.eyJ.x")).toBe("eyJ…");
   });
   it("truncates bodies to 2KB and snapshots to 200KB", () => {
     expect(sanitizeBody("x".repeat(5000)).length).toBeLessThan(2100);

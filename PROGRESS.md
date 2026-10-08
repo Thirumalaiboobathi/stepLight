@@ -7,7 +7,7 @@
 | 3 SDK + Playwright | ✅ done |
 | 4 Fixtures + demo agent | ✅ done |
 | 5 Viewer + CLI | ✅ done |
-| 6 Chrome extension | ⏳ |
+| 6 Chrome extension | ✅ done |
 | 7 Docs + polish | ⏳ |
 
 ## Known issues

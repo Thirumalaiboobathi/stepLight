@@ -53,7 +53,7 @@ export function collectPageScan(): PageScan {
     lines.push(text);
     const cs = win.getComputedStyle(el);
     let display = cs.display as string;
-    let visibility = cs.visibility as string;
+    const visibility = cs.visibility as string;
     let opacity = 1;
     let ariaHidden = false;
     let hiddenAttr = false;

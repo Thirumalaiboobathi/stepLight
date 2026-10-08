@@ -1,5 +1,5 @@
 import { isCrossSite } from "../domain.js";
-import { findSensitive, maskValue } from "../redact.js";
+import { findSensitive, maskSensitive } from "../redact.js";
 import type { Flag, StepRequest } from "../types.js";
 
 const OUTBOUND_METHODS = new Set(["POST", "PUT", "PATCH"]);
@@ -38,7 +38,7 @@ export function sensitiveOutbound(request: StepRequest, pageUrl?: string): Flag[
       type: "sensitive_data_outbound",
       severity,
       message: `Request to ${request.url} carries ${LABELS[m.kind]}`,
-      evidence: `${m.kind}: ${maskValue(m.value)}`,
+      evidence: `${m.kind}: ${maskSensitive(m)}`,
     });
   }
   return flags;

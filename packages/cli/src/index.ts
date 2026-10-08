@@ -65,3 +65,5 @@ export function buildProgram(): Command {
 
   return program;
 }
+export { createViewerServer, findViewerDir } from "./server.js";
+export type { IngestMessage, ServerOptions } from "./server.js";

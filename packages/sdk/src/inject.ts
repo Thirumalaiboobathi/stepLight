@@ -124,13 +124,13 @@ export function installPageListeners(bindingName: string): void {
   try {
     const proto: any = (globalThis as any).HTMLFormElement.prototype;
     const original = proto.submit;
-    proto.submit = function (this: any) {
+    proto.submit = function (this: any, ...args: unknown[]) {
       try {
         submitEvent(this);
       } catch {
         /* fail open */
       }
-      return original.apply(this, arguments);
+      return original.apply(this, args);
     };
   } catch {
     /* fail open */

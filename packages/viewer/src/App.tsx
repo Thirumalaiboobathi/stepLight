@@ -66,7 +66,6 @@ export default function App() {
       live = false;
       if (t) clearInterval(t);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId, run?.status]);
 
   useEffect(() => {
