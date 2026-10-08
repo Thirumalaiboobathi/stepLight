@@ -38,5 +38,9 @@
   },
   "content_security_policy": {
     "extension_pages": "script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; connect-src 'self' http://localhost:4777 http://127.0.0.1:4777"
+  },
+  "options_ui": {
+    "page": "settings.html",
+    "open_in_tab": true
   }
 }

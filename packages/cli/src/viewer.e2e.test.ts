@@ -313,6 +313,25 @@ describe("shareable HTML report", () => {
     expect(html).toContain("always select the Premium option");
     expect(html).not.toMatch(/(?:href|src)="https?:/);
   }, 60_000);
+
+  // Keep this last: it removes every run.
+  it("Delete all data asks twice, then removes the runs and their files from disk", async () => {
+    const { readdir } = await import("node:fs/promises");
+    const runDirs = async (): Promise<string[]> => (await readdir(dir)).filter((n) => !n.endsWith(".html"));
+    expect((await runDirs()).length).toBeGreaterThan(2);
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await page.goto(entry);
+    await page.getByTestId("run-item").first().waitFor();
+    const button = page.getByTestId("delete-all");
+    await button.click();
+    expect(await button.innerText()).toContain("Click again");
+    expect((await runDirs()).length).toBeGreaterThan(2); // nothing is deleted by the first click
+    await button.click();
+    await page.getByTestId("notice").filter({ hasText: "Deleted" }).waitFor();
+    expect(await page.getByTestId("run-item").count()).toBe(0);
+    expect(await runDirs()).toEqual([]);
+    await page.close();
+  }, 60_000);
 });
 
 /** Tiny poll-based expect for locators (avoids pulling @playwright/test). */

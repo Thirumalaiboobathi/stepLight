@@ -1,0 +1,24 @@
+:root { color-scheme: light dark; --line: #cbd5e1; --accent: #4f46e5; --danger: #dc2626; }
+body { margin: 0; font: 14px/1.5 system-ui, sans-serif; }
+main { max-width: 720px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 20px; margin: 0 0 4px; }
+h2 { font-size: 15px; margin: 0 0 8px; }
+section { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 14px 0; }
+section.danger { border-color: var(--danger); }
+.lead, .note { opacity: 0.8; margin: 4px 0 0; font-size: 13px; }
+.managed { color: var(--accent); font-weight: 600; }
+label { display: block; margin: 10px 0 4px; font-size: 13px; }
+label.choice { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0; }
+label.choice input { margin-top: 3px; }
+fieldset { border: 0; padding: 0; margin: 0; }
+textarea, input[type="number"] { width: 100%; box-sizing: border-box; padding: 7px 8px; font: 13px ui-monospace, Consolas, monospace; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; }
+input[type="number"] { width: 140px; }
+button { padding: 8px 14px; font: inherit; border: 0; border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; margin-right: 8px; }
+button.secondary { background: #64748b; }
+button.danger-btn { background: var(--danger); }
+button[disabled] { opacity: 0.5; cursor: not-allowed; }
+.actions { margin: 16px 0; display: flex; align-items: center; gap: 12px; }
+.errors { color: var(--danger); margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+.locked { opacity: 0.6; }
+code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+#saved, #deleted { font-size: 13px; opacity: 0.85; }

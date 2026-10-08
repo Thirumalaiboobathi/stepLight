@@ -28,6 +28,10 @@ function render(status: StatusReply): void {
   $("pairState").textContent = status.paired
     ? "Paired with the CLI for this browser session."
     : "Not paired. Without pairing, runs stay inside the extension.";
+  const paused = $("paused");
+  paused.hidden = !status.paused;
+  paused.textContent = status.paused ? `Recording paused on this site. ${status.paused}` : "";
+  $("level").textContent = status.captureLevel ? `Capture level: ${status.captureLevel}` : "";
   viewerUrl = connected ? SERVER_URL : chrome.runtime.getURL("viewer.html");
   $("error").textContent = status.error
     ? status.error
@@ -67,4 +71,13 @@ $("pair").addEventListener("click", () => {
     input.value = "";
     render(status);
   });
+});
+
+$("settingsLink").addEventListener("click", (e) => {
+  e.preventDefault();
+  void chrome.runtime.openOptionsPage();
+});
+void chrome.storage.local.get("sl-settings").then((stored) => {
+  const done = (stored["sl-settings"] as { firstRunDone?: boolean } | undefined)?.firstRunDone === true;
+  $("firstRunHint").hidden = done;
 });

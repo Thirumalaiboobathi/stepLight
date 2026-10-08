@@ -90,9 +90,33 @@ describe("start / stop / status", () => {
   });
 
   it("reports status and connection mode when idle", async () => {
-    expect(await handleMessage({ type: "status" }, fakeDeps().deps)).toEqual({ recording: false, steps: 0, mode: "connected" });
+    expect(await handleMessage({ type: "status" }, fakeDeps().deps)).toEqual({ recording: false, steps: 0, mode: "connected", captureLevel: "standard" });
     const down = fakeDeps({ probe: async () => false });
-    expect(await handleMessage({ type: "status" }, down.deps)).toEqual({ recording: false, steps: 0, mode: "standalone" });
+    expect(await handleMessage({ type: "status" }, down.deps)).toEqual({ recording: false, steps: 0, mode: "standalone", captureLevel: "standard" });
+  });
+
+  it("says why recording is paused on a denied site", async () => {
+    const t = fakeDeps({
+      settings: async () => ({ ...DEFAULT_SETTINGS, siteDenylist: ["mybank.com"] }),
+      activeTab: async () => ({ id: 1, url: "https://www.mybank.com/accounts" }),
+    });
+    const reply = await handleMessage({ type: "status" }, t.deps);
+    expect(reply.paused).toContain("paused");
+    const ok = fakeDeps({ activeTab: async () => ({ id: 1, url: "https://shop.test/" }) });
+    expect((await handleMessage({ type: "status" }, ok.deps)).paused).toBeUndefined();
+  });
+
+  it("delete_all removes runs, the token and the recording in one step", async () => {
+    let deleted = 0;
+    const t = fakeDeps({ deleteAll: async () => void deleted++ });
+    await handleMessage({ type: "start", task: "t" }, t.deps);
+    await t.local.startRun({ id: "old", task: "x", startedAt: 1 });
+    const reply = await handleMessage({ type: "delete_all" }, t.deps);
+    expect(reply.recording).toBe(false);
+    expect(deleted).toBe(1);
+    expect(t.stored()).toBeUndefined();
+    expect(t.calls.disable).toBe(1);
+    expect(await t.local.listRuns()).toEqual([]);
   });
 
   it("reports an error instead of throwing when storage fails", async () => {

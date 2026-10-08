@@ -21,7 +21,7 @@ const TASK_FLIGHT = "Book the cheapest flight from Delhi to Mumbai";
  */
 async function bookFlight(browser, site, dir, pageName, task) {
   const page = await browser.newPage();
-  const run = await steplight.record(page, { task, dir, meta: { agent: DEMO_AGENT, page: pageName } });
+  const run = await steplight.record(page, { task, dir, meta: { agent: DEMO_AGENT, page: pageName }, captureLevel: "full" });
   await page.goto(`${site.url}/${pageName}`);
   const pageText = await page.evaluate(() => document.body.textContent ?? "");
   await run.note("Reading the flight list. Cheapest looks like Economy ₹28,000.");
@@ -56,7 +56,7 @@ async function downloadReport(browser, site, dir) {
 /** An agent that keeps clicking a covered button, then hits a disabled one and a mistyped selector. */
 async function stuckAgent(browser, site, dir) {
   const page = await browser.newPage();
-  const run = await steplight.record(page, { task: "Place the order", dir, meta: { agent: DEMO_AGENT } });
+  const run = await steplight.record(page, { task: "Place the order", dir, meta: { agent: DEMO_AGENT }, captureLevel: "full" });
   await page.goto(`${site.url}/stuck.html`);
   await run.note("Clicking Place order");
   const attempt = async (selector) => {

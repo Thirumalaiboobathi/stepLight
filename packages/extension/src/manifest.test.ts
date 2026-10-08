@@ -44,7 +44,7 @@ describe("manifest icons", () => {
 describe.skipIf(!existsSync(path.join(root, "dist")))("built extension (dist)", () => {
   const dist = path.join(root, "dist");
   it("contains every file the manifest references", () => {
-    const files = [manifest.background.service_worker, manifest.action.default_popup, "content.js", "popup.js", "deep.js", "viewer.html", ...Object.values<string>(manifest.icons)];
+    const files = [manifest.background.service_worker, manifest.action.default_popup, "content.js", "popup.js", "deep.js", "settings.js", "settings.html", "viewer.html", ...Object.values<string>(manifest.icons)];
     for (const f of files) expect(existsSync(path.join(dist, f)), f).toBe(true);
   });
   it("bundles content script as a classic script with no module imports", () => {
@@ -53,7 +53,7 @@ describe.skipIf(!existsSync(path.join(root, "dist")))("built extension (dist)", 
     expect(content).not.toMatch(/^\s*export\s/m);
   });
   it("makes no network calls except to localhost", () => {
-    for (const f of ["background.js", "content.js", "popup.js", "deep.js"]) {
+    for (const f of ["background.js", "content.js", "popup.js", "deep.js", "settings.js"]) {
       const code = readFileSync(path.join(dist, f), "utf8");
       const urls = code.match(/https?:\/\/[a-z0-9.-]+/gi) ?? [];
       const external = urls.filter((u) => !/localhost|127\.0\.0\.1|example\.|\.test|w3\.org|schema|opentelemetry|github|json-schema/i.test(u));

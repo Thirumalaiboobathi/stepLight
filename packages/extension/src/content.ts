@@ -1,4 +1,16 @@
-import { collectPageScan, computeTokenStats, hiddenInstruction } from "@steplight/core";
+import {
+  collectPageScan,
+  computeTokenStats,
+  configureRedaction,
+  hiddenInstruction,
+  isNeverCaptureField,
+  isPaymentFrameUrl,
+  normalizeSettings,
+  recordingBlockedReason,
+  type Settings,
+} from "@steplight/core";
+import { showIndicator, type Indicator } from "./indicator.js";
+import { redactEventAtSource } from "./source-redaction.js";
 import { listenForDeepCapture } from "./deep-receiver.js";
 import type { ExtensionMessage, PageEventMsg, StatusReply } from "./messages.js";
 
@@ -14,13 +26,33 @@ function selectorOf(el: Element): string {
   return cls ? `${tag}.${cls}` : tag;
 }
 
+/** Describe a form control for the "never capture" rules. */
+function describeField(el: Element): Parameters<typeof isNeverCaptureField>[0] {
+  const input = el as HTMLInputElement;
+  return {
+    tag: el.tagName.toLowerCase(),
+    type: input.type,
+    name: input.name,
+    id: el.id,
+    autocomplete: el.getAttribute("autocomplete") ?? "",
+    ariaLabel: el.getAttribute("aria-label") ?? "",
+    placeholder: el.getAttribute("placeholder") ?? "",
+    contentEditable: (el as HTMLElement).isContentEditable,
+    inPaymentFrame: isPaymentFrameUrl(location.href),
+  };
+}
+
+const isNeverCapture = (el: Element): boolean => isNeverCaptureField(describeField(el));
+
 function textOf(el: Element): string {
+  const isButtonInput = el.tagName === "INPUT" && /^(button|submit|reset|image)$/i.test((el as HTMLInputElement).type);
+  const protectedField = isNeverCapture(el);
   const t =
     el.getAttribute("aria-label") ||
     el.getAttribute("title") ||
-    (el as HTMLElement).innerText ||
-    (el as HTMLInputElement).value ||
-    el.textContent ||
+    (protectedField ? "" : (el as HTMLElement).innerText) ||
+    (isButtonInput ? (el as HTMLInputElement).value : "") ||
+    (protectedField ? "" : el.textContent) ||
     "";
   return t.replace(/\s+/g, " ").trim().slice(0, 200);
 }
@@ -39,7 +71,7 @@ function labelOf(el: HTMLInputElement): string {
     .slice(0, 100);
 }
 
-/** URL-encoded form fields. Password values are never read; file inputs are skipped. */
+/** URL-encoded form fields. Password, card, OTP and similar fields are never read; file inputs are skipped. */
 function formBody(form: HTMLFormElement): string {
   const parts: string[] = [];
   for (const el of Array.from(form.elements) as HTMLInputElement[]) {
@@ -47,28 +79,51 @@ function formBody(form: HTMLFormElement): string {
     const type = (el.type || "").toLowerCase();
     if ((type === "checkbox" || type === "radio") && !el.checked) continue;
     if (type === "submit" || type === "button" || type === "file") continue;
-    const value = type === "password" ? "[password]" : String(el.value ?? "");
-    parts.push(`${encodeURIComponent(el.name)}=${encodeURIComponent(value)}`);
+    if (isNeverCapture(el)) continue; // never read, not even the name
+    parts.push(`${encodeURIComponent(el.name)}=${encodeURIComponent(String(el.value ?? ""))}`);
   }
   return parts.join("&");
 }
 
-function main(): void {
+/** Settings from extension storage; any problem falls back to the safe defaults. */
+async function loadSettings(): Promise<Settings> {
+  try {
+    const stored = await chrome.storage.local.get("sl-settings");
+    return normalizeSettings(stored["sl-settings"]);
+  } catch {
+    return normalizeSettings(undefined);
+  }
+}
+
+async function main(): Promise<void> {
   const g = globalThis as Marked;
   if (g.__steplightContent) return;
   g.__steplightContent = true;
+  const settings = await loadSettings();
+  configureRedaction({ customPatterns: settings.customPatterns });
+  // Site rules: on a denied site nothing is read, redacted, stored or even looked at.
+  if (recordingBlockedReason(location.href, settings)) return;
   let active = true;
+  let indicator: Indicator | undefined = settings.pageIndicator ? showIndicator() : undefined;
+  const stopRecording = (): void => {
+    active = false;
+    indicator?.remove();
+    indicator = undefined;
+  };
 
   const send = (event: PageEventMsg): void => {
     if (!active) return;
-    const message: ExtensionMessage = { type: "event", event };
+    // Redact at the source: nothing leaves the page unredacted (the worker redacts again).
+    const safe = redactEventAtSource(event);
+    if (!safe) return; // redaction failed: drop the event
+    const message: ExtensionMessage = { type: "event", event: safe };
     chrome.runtime
       .sendMessage(message)
       .then((reply: StatusReply | undefined) => {
-        if (!reply?.recording) active = false; // recording stopped: go quiet
+        if (!reply?.recording) stopRecording(); // recording stopped: go quiet
       })
       .catch(() => {
-        active = false; // extension reloaded or unavailable
+        stopRecording(); // extension reloaded or unavailable
       });
   };
 
@@ -183,8 +238,11 @@ function main(): void {
   // Scripts often insert text shortly after load (and after client-side route changes).
   setTimeout(() => readPage("change"), 1000);
   try {
-    const observer = new MutationObserver(() => {
+    const observer = new MutationObserver((records) => {
       if (!active) return observer.disconnect();
+      // Adding or removing our own recording pill is not a page change.
+      const host = indicator?.host;
+      if (host && records.every((r) => r.target === host || Array.from(r.addedNodes).includes(host) || Array.from(r.removedNodes).includes(host))) return;
       scheduleRead();
     });
     observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["style", "class", "hidden", "aria-label", "alt"] });
@@ -195,13 +253,16 @@ function main(): void {
   // The service worker tells us about SPA route changes (history.pushState / #fragment).
   chrome.runtime.onMessage.addListener((message: unknown, sender) => {
     if (sender.id !== chrome.runtime.id || sender.tab) return; // only from our own service worker
-    if (typeof message === "object" && message !== null && (message as { type?: unknown }).type === "rescan") {
+    const type = typeof message === "object" && message !== null ? (message as { type?: unknown }).type : undefined;
+    if (type === "rescan") {
       scans = Math.max(0, scans - 5); // a route change earns a few extra reads
       scheduleRead(300);
+    } else if (type === "stopped") {
+      stopRecording();
     }
   });
 
   listenForDeepCapture(send, () => active);
 }
 
-main();
+void main();

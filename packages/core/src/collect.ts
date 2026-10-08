@@ -29,6 +29,37 @@ export function collectPageScan(): PageScan {
   // Text that is not rendered but is still read by agents working on raw HTML / the a11y tree.
   const extras: { text: string; source: "comment" | "attribute"; label: string }[] = [];
 
+  // "Never capture" rule (always on): text inside password / card / OTP-style editable fields is
+  // never read. Mirrors neverCapture.ts (kept in sync by a test); repeated here because this
+  // function is serialised into the page and cannot import.
+  const NEVER_NAME = /(^|[^a-z0-9])(card|cc|cvv|cvc|csc|otp|pin|ssn|aadhaar|aadhar|pan|passcode|password|passwd|pwd|iban|secret|token|csrf)\d{0,2}([^a-z0-9]|$)|cardnum|creditcard|ccnum|cvv2|cardno|panno|aadhaarno/i;
+  const NEVER_AUTO = /(^|\s)(cc-[a-z-]+|one-time-code|current-password|new-password)(\s|$)/i;
+  const PAY_HOSTS: string[] = ["stripe.com", "paypal.com", "braintreegateway.com", "adyen.com", "checkout.com", "razorpay.com", "paytm.com", "payu.in", "payu.com", "squareup.com", "squarecdn.com", "worldpay.com", "authorize.net", "cybersource.com", "klarna.com", "mollie.com", "recurly.com", "bluesnap.com"];
+  const neverField = (e: any): boolean => {
+    const tag = String(e.tagName).toLowerCase();
+    const editable = tag === "input" || tag === "textarea" || tag === "select" || e.isContentEditable === true;
+    if (!editable) return false;
+    if (String(e.type || "").toLowerCase() === "password") return true;
+    if (NEVER_AUTO.test(String(e.getAttribute("autocomplete") || ""))) return true;
+    const words = [e.name, e.id, e.getAttribute("aria-label"), e.getAttribute("placeholder")]
+      .filter(Boolean)
+      .map((v: any) => String(v).replace(/([a-z0-9])([A-Z])/g, "$1_$2"))
+      .join(" ");
+    if (words && NEVER_NAME.test(words)) return true;
+    try {
+      const host = String(win.location.hostname).toLowerCase();
+      return PAY_HOSTS.some((h) => host === h || host.endsWith("." + h));
+    } catch {
+      return false;
+    }
+  };
+  const inNeverField = (el: any): boolean => {
+    for (let e = el.closest ? el.closest("input,textarea,select,[contenteditable]") : null; e; e = e.parentElement && e.parentElement.closest ? e.parentElement.closest("input,textarea,select,[contenteditable]") : null) {
+      if (neverField(e)) return true;
+    }
+    return false;
+  };
+
   const walker = doc.createTreeWalker(doc.documentElement, 132 /* SHOW_TEXT | SHOW_COMMENT */);
   let n: any;
   while ((n = walker.nextNode())) {
@@ -40,6 +71,7 @@ export function collectPageScan(): PageScan {
     }
     const el = n.parentElement;
     if (!el || SKIP.has(el.tagName)) continue;
+    if (inNeverField(el)) continue;
     const prev = perElement.get(el) as string | undefined;
     if (prev === undefined) order.push(el);
     perElement.set(el, prev === undefined ? t : `${prev} ${t}`);

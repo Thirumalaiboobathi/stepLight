@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import { DEFAULT_RUNS_DIR, formatTokens, summarizeTokens, clearRuns, exportRunOtlp, generatePlaywrightTest, readRun, DEFAULT_OTLP_ENDPOINT } from "@steplight/core/node";
+import { DEFAULT_RUNS_DIR, formatTokens, summarizeTokens, clearRuns, exportRunOtlp, generatePlaywrightTest, listRuns, purgeRuns, readRun, DEFAULT_OTLP_ENDPOINT } from "@steplight/core/node";
 import { renderStoredReport } from "./reportCommand.js";
 import { runCheck } from "./checkCommand.js";
 import { registerRedteam } from "./redteamCommand.js";
@@ -31,10 +31,24 @@ export function buildProgram(): Command {
     .option("-d, --dir <dir>", "runs directory", process.env.STEPLIGHT_DIR ?? DEFAULT_RUNS_DIR)
     .option("--host <address>", "address to bind (default 127.0.0.1; anything else exposes your data to the network)")
     .option("--extension-id <id...>", "only accept the API from this Chrome extension id (repeatable)")
-    .action((opts: { port: string; dir: string; host?: string; extensionId?: string[] }) => {
+    .option("--retention-days <n>", "delete runs older than n days when the viewer starts (also $STEPLIGHT_RETENTION_DAYS)")
+    .action(async (opts: { port: string; dir: string; host?: string; extensionId?: string[]; retentionDays?: string }) => {
       const here = path.dirname(fileURLToPath(import.meta.url));
       const runsDir = path.resolve(opts.dir);
       const host = opts.host ?? "127.0.0.1";
+      const retention = Number(opts.retentionDays ?? process.env.STEPLIGHT_RETENTION_DAYS ?? "");
+      if (opts.retentionDays !== undefined || process.env.STEPLIGHT_RETENTION_DAYS) {
+        if (Number.isFinite(retention) && retention >= 0) {
+          const gone = await purgeRuns(runsDir, { olderThanDays: retention });
+          if (gone.length > 0) console.log(`Retention: deleted ${gone.length} run(s) older than ${retention} day(s).`);
+        } else {
+          console.error("steplight: --retention-days must be a number of days.");
+        }
+      } else {
+        // Nothing is deleted unless asked for: these are your files. A hint is enough.
+        const old = (await listRuns(runsDir).catch(() => [])).filter((r) => r.startedAt < Date.now() - 7 * 86_400_000).length;
+        if (old > 0) console.log(`${old} stored run(s) are older than 7 days. Remove them with: steplight purge --older-than-days 7`);
+      }
       const server = createViewerServer({
         runsDir,
         viewerDir: findViewerDir(here),
@@ -66,6 +80,33 @@ export function buildProgram(): Command {
             `the extension popup (Pair with CLI) to send runs here. The token changes on every start.`,
         );
       });
+    });
+
+  program
+    .command("purge")
+    .description("Delete stored runs: those older than N days, or all of them (run folders are removed, snapshots included)")
+    .option("--older-than-days <n>", "delete runs that started more than n days ago")
+    .option("--all", "delete every run (needs --yes)")
+    .option("--yes", "confirm deleting everything")
+    .option("-d, --dir <dir>", "runs directory", process.env.STEPLIGHT_DIR ?? DEFAULT_RUNS_DIR)
+    .action(async (opts: { olderThanDays?: string; all?: boolean; yes?: boolean; dir: string }) => {
+      const runsDir = path.resolve(opts.dir);
+      if (opts.all && !opts.yes) {
+        console.error("steplight: --all deletes every stored run. Add --yes to confirm.");
+        process.exitCode = 2;
+        return;
+      }
+      const days = opts.olderThanDays === undefined ? undefined : Number(opts.olderThanDays);
+      if (!opts.all && (days === undefined || !Number.isFinite(days) || days < 0)) {
+        console.error("steplight: give --older-than-days <n> or --all --yes.");
+        process.exitCode = 2;
+        return;
+      }
+      const deleted = await purgeRuns(runsDir, opts.all ? { all: true } : { olderThanDays: days! });
+      console.log(`Deleted ${deleted.length} run${deleted.length === 1 ? "" : "s"} from ${runsDir}.`);
+      if (deleted.length > 0) {
+        console.log("Note: deleting files does not overwrite them on disk. Use --encrypt (or disk encryption) if the data was sensitive.");
+      }
     });
 
   program

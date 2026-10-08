@@ -46,7 +46,7 @@ const snapKey = (id: string, stepId: string) => `sl:snap:${id}:${stepId}`;
  * await store.startRun({ id, task, startedAt: Date.now(), meta: {} });
  */
 export class LocalRunStore {
-  private readonly maxBytes: number;
+  private maxBytes: number;
   private readonly maxSnap: number;
   private queue: Promise<unknown> = Promise.resolve();
 
@@ -268,6 +268,27 @@ export class LocalRunStore {
       const ids = await this.index();
       await this.removeRun(id, (await this.metas([id])).get(id));
       await this.kv.set({ [INDEX]: ids.filter((i) => i !== id) });
+    });
+  }
+
+  /** Change the storage budget (e.g. when the user edits the setting). Existing runs are evicted on the next write. */
+  setMaxBytes(bytes: number): void {
+    if (Number.isFinite(bytes) && bytes > 0) this.maxBytes = Math.floor(bytes);
+  }
+
+  /**
+   * Retention: delete every run that started before `cutoff` (epoch ms), except `keepId` (the run
+   * being recorded right now). Returns the deleted ids.
+   * @example await store.deleteOlderThan(Date.now() - 7 * 86_400_000, activeRunId)
+   */
+  deleteOlderThan(cutoff: number, keepId?: string): Promise<string[]> {
+    return this.serial(async () => {
+      const ids = await this.index();
+      const metas = await this.metas(ids);
+      const doomed = ids.filter((id) => id !== keepId && (metas.get(id)?.startedAt ?? 0) < cutoff);
+      for (const id of doomed) await this.removeRun(id, metas.get(id));
+      if (doomed.length > 0) await this.kv.set({ [INDEX]: ids.filter((i) => !doomed.includes(i)) });
+      return doomed;
     });
   }
 

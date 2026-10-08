@@ -48,6 +48,20 @@ beforeAll(async () => {
       res.writeHead(204);
       return void res.end();
     }
+    if (req.url?.startsWith("/pay")) {
+      res.writeHead(200, { "content-type": "text/html" });
+      return void res.end(`<!doctype html><title>Pay</title><h1>Checkout</h1><p>Total 1,499. Ref LAMPCODE-12345.</p>
+<form id="f" method="POST" action="/api/pay?session=abc123tok">
+  <input name="email" value="traveler@example.com">
+  <input type="password" name="pw" value="hunter2xyz">
+  <input name="card_number" value="4242 4242 4242 4242">
+  <input autocomplete="one-time-code" name="sms" value="654321">
+  <input name="note" value="plain note">
+  <textarea name="cardnote">SECRET-CARD-NOTE</textarea>
+  <button id="go" type="submit">Pay</button>
+</form>
+<div contenteditable aria-label="CVV" id="cvv">SECRET-CVV-TEXT</div>`);
+    }
     if (req.url?.startsWith("/api/")) {
       res.writeHead(200, { "content-type": "application/json" });
       return void res.end('{"items":0}');
@@ -118,6 +132,8 @@ async function popupPage(): Promise<Page> {
   return popup;
 }
 
+let recordings = 0;
+
 /** Record `url` in a fresh active tab and return the stored run. */
 async function record(
   url: string,
@@ -135,7 +151,7 @@ async function record(
   const page = await context.newPage();
   await page.goto("about:blank");
   await page.bringToFront();
-  const task = `net: ${url}`;
+  const task = `rec-${++recordings}`; // not the URL: task titles are redacted too
   const started = await popup.evaluate((t) => chrome.runtime.sendMessage({ type: "start", task: t }), task);
   expect(started).toMatchObject({ recording: true, mode: "connected" });
   await page.goto(url);
@@ -300,4 +316,196 @@ describe.sequential("network capture and SPA routes in a real browser", () => {
     const worst = run.steps.flatMap((s) => s.flags).filter((f) => f.severity === "high" || f.severity === "critical");
     expect(worst).toEqual([]);
   }, 90_000);
+});
+
+
+/* ------------------------------------------------------------------------------------------ */
+/* Privacy controls                                                                            */
+/* ------------------------------------------------------------------------------------------ */
+
+describe.sequential("privacy controls in a real browser", () => {
+  const PAY = (): string => `http://127.0.0.1:${analyticsPort}/pay?token=abcdef123456`;
+  const SECRETS = ["hunter2xyz", "4242 4242 4242 4242", "4242%204242", "654321", "SECRET-CARD-NOTE", "SECRET-CVV-TEXT", "traveler@example.com", "abc123tok", "abcdef123456"];
+
+  async function everythingOnDisk(runId?: string): Promise<string> {
+    let all = "";
+    const walk = async (d: string): Promise<void> => {
+      for (const e of await readdir(d, { withFileTypes: true })) {
+        const full = path.join(d, e.name);
+        if (e.isDirectory()) await walk(full);
+        else all += `${await readFile(full, "utf8")}\n`;
+      }
+    };
+    await walk(runId ? path.join(runsDir, runId) : runsDir);
+    return all;
+  }
+
+  const submitForm = async (page: Page): Promise<void> => {
+    await Promise.all([page.waitForURL(/api\/pay/), page.click("#go")]);
+  };
+
+  it("password, card, one-time-code and CVV fields never reach storage, at any capture level", async (ctx) => {
+    if (!portFree) return ctx.skip();
+    for (const captureLevel of ["minimal", "standard", "full"] as const) {
+      const run = await record(PAY(), submitForm, { captureLevel });
+      expect(run.steps.length, captureLevel).toBeGreaterThan(2);
+      const disk = await everythingOnDisk();
+      for (const secret of SECRETS) expect(disk, `${captureLevel}: ${secret}`).not.toContain(secret);
+    }
+  }, 180_000);
+
+  it("full level keeps the body of ordinary fields (redacted); standard keeps none", async (ctx) => {
+    if (!portFree) return ctx.skip();
+    const full = await record(PAY(), submitForm, { captureLevel: "full" });
+    const submit = full.steps.find((s) => s.kind === "form_submit")!;
+    expect(submit.request?.bodyPreview).toContain("note=plain note");
+    expect(submit.request?.bodyPreview).toContain("email=[REDACTED:email]");
+    expect(submit.request?.bodyPreview).not.toMatch(/pw=|card_number|sms=|cardnote/);
+    // The raw body was analysed even though it is not stored: an email going back to the page's own site is "low".
+    expect(submit.flags.map((f) => `${f.type}:${f.severity}`)).toContain("sensitive_data_outbound:low");
+    const standard = await record(PAY(), submitForm, { captureLevel: "standard" });
+    expect(standard.steps.find((s) => s.kind === "form_submit")?.request?.bodyPreview).toBeUndefined();
+  }, 120_000);
+
+  it("minimal level stores no page text and no query strings", async (ctx) => {
+    if (!portFree) return ctx.skip();
+    const run = await record(PAY(), submitForm, { captureLevel: "minimal" });
+    expect(run.steps.every((s) => !s.snapshotRef)).toBe(true);
+    for (const s of run.steps) {
+      expect(s.url ?? "", s.kind).not.toContain("?");
+      expect(s.targetText, s.kind).toBeUndefined();
+    }
+    const disk = await everythingOnDisk(run.id);
+    expect(disk).not.toContain("Checkout");
+    expect(disk).not.toContain("LAMPCODE");
+  }, 60_000);
+
+  it("standard level stores redacted page text and the user's custom patterns apply", async (ctx) => {
+    if (!portFree) return ctx.skip();
+    const run = await record(PAY(), undefined, { customPatterns: ["LAMPCODE-\\d+", "(a+)+$"] }); // the second is rejected as unsafe
+    const read = run.steps.find((s) => s.kind === "page_read")!;
+    const snap = await (await fetch(`http://127.0.0.1:4777/api/runs/${run.id}/snapshot/${read.id}`, { headers: { authorization: `Bearer ${server!.token}` } })).text();
+    expect(snap).toContain("Checkout");
+    expect(snap).toContain("[REDACTED:custom]");
+    expect(snap).not.toContain("LAMPCODE-12345");
+  }, 60_000);
+
+  it("denied sites are never recorded and say so", async (ctx) => {
+    if (!portFree) return ctx.skip();
+    const popup = await popupPage();
+    await popup.evaluate((st) => chrome.storage.local.set({ "sl-settings": st }), { siteDenylist: ["127.0.0.1"] });
+    const page = await context.newPage();
+    await page.goto(PAY());
+    await page.bringToFront();
+    const status = await popup.evaluate(() => chrome.runtime.sendMessage({ type: "status" }));
+    expect(status).toMatchObject({ paused: expect.stringContaining("deny list") });
+    await popup.close();
+    await page.close();
+    const run = await record(PAY(), submitForm, { siteDenylist: ["127.0.0.1"] });
+    expect(run.steps.map((s) => `${s.kind} ${s.url ?? ""} ${s.request?.url ?? ""}`)).toEqual([]); // not a single navigate, read, click or request
+    expect(await everythingOnDisk(run.id)).not.toContain("Checkout");
+  }, 90_000);
+
+  it("shows a recording badge on the toolbar icon and a pill on the page, and removes both on stop", async (ctx) => {
+    if (!portFree) return ctx.skip();
+    const [worker] = context.serviceWorkers();
+    const popup = await popupPage();
+    await popup.evaluate((st) => chrome.storage.local.set({ "sl-settings": st }), { pageIndicator: true });
+    await popup.evaluate((t) => chrome.runtime.sendMessage({ type: "pair", link: `http://127.0.0.1:4777/#token=${t}` }), server!.token);
+    const page = await context.newPage();
+    await page.goto("about:blank");
+    await page.bringToFront();
+    await popup.evaluate(() => chrome.runtime.sendMessage({ type: "start", task: "badge test" }));
+    await page.goto(`http://127.0.0.1:${analyticsPort}/`);
+    await expect.poll(() => worker!.evaluate(() => chrome.action.getBadgeText({}))).toBe("REC");
+    await expect.poll(() => page.locator("[data-steplight-indicator]").count()).toBe(1);
+    // the pill is in a closed shadow root: it is not part of the page text an agent reads
+    expect(await page.evaluate(() => document.body.innerText)).not.toContain("Steplight is recording");
+    await popup.evaluate(() => chrome.runtime.sendMessage({ type: "stop" }));
+    await expect.poll(() => worker!.evaluate(() => chrome.action.getBadgeText({}))).toBe("");
+    await expect.poll(() => page.locator("[data-steplight-indicator]").count()).toBe(0);
+    await page.close();
+    await popup.close();
+  }, 90_000);
+
+  it("the indicator can be turned off", async (ctx) => {
+    if (!portFree) return ctx.skip();
+    const popup = await popupPage();
+    await popup.evaluate((st) => chrome.storage.local.set({ "sl-settings": st }), { pageIndicator: false });
+    await popup.evaluate((t) => chrome.runtime.sendMessage({ type: "pair", link: `http://127.0.0.1:4777/#token=${t}` }), server!.token);
+    const page = await context.newPage();
+    await page.goto("about:blank");
+    await page.bringToFront();
+    await popup.evaluate(() => chrome.runtime.sendMessage({ type: "start", task: "no pill" }));
+    await page.goto(`http://127.0.0.1:${analyticsPort}/`);
+    await page.waitForTimeout(1200);
+    expect(await page.locator("[data-steplight-indicator]").count()).toBe(0);
+    await popup.evaluate(() => chrome.runtime.sendMessage({ type: "stop" }));
+    await page.close();
+    await popup.close();
+  }, 60_000);
+
+  it("retention deletes expired runs (and their snapshots) from extension storage; delete-all removes everything", async (ctx) => {
+    if (!portFree) return ctx.skip();
+    const popup = await popupPage();
+    await popup.evaluate((st) => chrome.storage.local.set({ "sl-settings": st }), { retentionDays: 7 });
+    await popup.evaluate(() => chrome.runtime.sendMessage({ type: "unpair" })); // no token -> standalone mode
+    const recordStandalone = async (task: string): Promise<void> => {
+      const page = await context.newPage();
+      await page.goto("about:blank");
+      await page.bringToFront();
+      const started = await popup.evaluate((t) => chrome.runtime.sendMessage({ type: "start", task: t }), task);
+      expect(started).toMatchObject({ recording: true, mode: "standalone" });
+      await page.goto(`http://127.0.0.1:${analyticsPort}/pay`);
+      await page.waitForTimeout(1200);
+      await popup.evaluate(() => chrome.runtime.sendMessage({ type: "stop" }));
+      await page.close();
+    };
+    const dump = (): Promise<Record<string, unknown>> => popup.evaluate(() => chrome.storage.local.get(null));
+    await recordStandalone("old run");
+    await recordStandalone("new run");
+    const keys = (all: Record<string, unknown>): string[] => Object.keys(all).filter((k) => k.startsWith("sl:"));
+    const metaKeys = keys(await dump()).filter((k) => k.startsWith("sl:meta:"));
+    expect(metaKeys).toHaveLength(2);
+    // make the first run 10 days old
+    const all = await dump();
+    const oldKey = metaKeys.find((k) => (all[k] as { task: string }).task === "old run")!;
+    const oldId = oldKey.slice("sl:meta:".length);
+    await popup.evaluate(
+      ([k, v]) => chrome.storage.local.set({ [k as string]: { ...(v as object), startedAt: Date.now() - 10 * 86_400_000 } }),
+      [oldKey, all[oldKey]],
+    );
+    await popup.evaluate(() => chrome.runtime.sendMessage({ type: "status" })); // opening the popup enforces retention
+    await expect.poll(async () => keys(await dump()).some((k) => k.includes(oldId))).toBe(false);
+    const after = await dump();
+    expect(JSON.stringify(after)).toContain("new run");
+    expect(JSON.stringify(after)).not.toContain("old run");
+
+    // "Delete all Steplight data"
+    await popup.evaluate(() => chrome.runtime.sendMessage({ type: "delete_all" }));
+    expect(keys(await dump())).toEqual([]);
+    expect(JSON.stringify(await dump())).not.toContain("Checkout");
+    await popup.close();
+  }, 120_000);
+
+  it("the settings page loads, validates patterns and saves", async (ctx) => {
+    if (!portFree) return ctx.skip();
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extId}/settings.html`);
+    await page.locator('input[name="level"][value="minimal"]').check();
+    await page.locator("#deny").fill("mybank.com\n*.hospital.org\nnot a domain");
+    await page.locator("#patterns").fill("EMP-\\d{6}\n(a+)+$");
+    await page.click("#save");
+    await expect.poll(() => page.locator("#saved").innerText()).toContain("Not saved");
+    expect(await page.locator("#patternErrors li").count()).toBe(1);
+    await page.locator("#patterns").fill("EMP-\\d{6}");
+    await page.click("#save");
+    await expect.poll(() => page.locator("#saved").innerText()).toContain("Saved");
+    const saved = await page.evaluate(() => chrome.storage.local.get("sl-settings"));
+    expect(saved["sl-settings"]).toMatchObject({ captureLevel: "minimal", siteDenylist: ["mybank.com", "*.hospital.org"], customPatterns: ["EMP-\\d{6}"], firstRunDone: true });
+    await page.reload();
+    expect(await page.locator('input[name="level"][value="minimal"]').isChecked()).toBe(true);
+    await page.locator("#firstRun").waitFor({ state: "hidden" });
+    await page.close();
+  }, 60_000);
 });

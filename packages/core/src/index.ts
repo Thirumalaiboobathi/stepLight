@@ -22,3 +22,7 @@ export * from "./htmlReport.js";
 export * from "./hash.js";
 export * from "./network.js";
 export * from "./settings.js";
+export * from "./neverCapture.js";
+export { ibanValid, ibanCheckDigits, verhoeffValid, verhoeffAppend } from "./checksums.js";
+export * from "./customPatterns.js";
+export * from "./captureLevel.js";

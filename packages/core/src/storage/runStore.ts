@@ -207,3 +207,40 @@ export async function clearRuns(root: string, options: ClearOptions = {}): Promi
   for (const r of doomed) await deleteRun(root, r.id);
   return doomed.map((r) => r.id);
 }
+
+/** Options for {@link purgeRuns}. */
+export interface PurgeOptions {
+  /** Delete runs that started more than this many days ago. */
+  olderThanDays?: number;
+  /** Delete every run. */
+  all?: boolean;
+  /** Clock override for tests. */
+  now?: number;
+}
+
+/**
+ * Retention for run folders: delete runs older than N days (or all of them). The whole run
+ * folder goes, including every snapshot file. Returns the deleted run ids. Only valid run
+ * folders inside `root` are touched. Note: removing a file does not overwrite its bytes on disk;
+ * on a shared or unencrypted disk, use the encryption options as well.
+ * @example await purgeRuns(".steplight/runs", { olderThanDays: 7 })
+ */
+export async function purgeRuns(root: string, options: PurgeOptions): Promise<string[]> {
+  if (!options.all && (options.olderThanDays === undefined || !(options.olderThanDays >= 0))) return [];
+  const cutoff = (options.now ?? Date.now()) - (options.olderThanDays ?? 0) * 86_400_000;
+  const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+  const deleted: string[] = [];
+  for (const e of entries) {
+    if (!e.isDirectory() || !isSafeId(e.name)) continue;
+    try {
+      const run = await readRun(root, e.name);
+      if (options.all || run.startedAt < cutoff) {
+        await deleteRun(root, e.name);
+        deleted.push(e.name);
+      }
+    } catch {
+      /* not a run folder: leave it alone */
+    }
+  }
+  return deleted;
+}

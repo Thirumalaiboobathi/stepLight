@@ -10,9 +10,13 @@
     <label for="task">Task name</label>
     <input id="task" placeholder="e.g. Book the cheapest flight" />
     <button id="toggle" class="start">Start recording</button>
+    <div id="paused" class="paused" hidden></div>
     <div id="state">Not recording</div>
+    <div id="level" class="level"></div>
     <div id="error"></div>
     <a id="viewer" href="#">Open viewer ↗</a>
+    <a id="settingsLink" href="#">Privacy settings</a>
+    <div id="firstRunHint" class="hint" hidden>First time here? Choose what Steplight keeps and which sites to skip in Privacy settings.</div>
     <details class="pair">
       <summary>Pair with CLI (optional)</summary>
       <label for="pairLink">Paste the link printed by <code>steplight view</code></label>

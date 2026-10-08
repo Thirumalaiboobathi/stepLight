@@ -132,6 +132,7 @@ export function parseMessage(raw: unknown): ExtensionMessage | undefined {
     case "status":
     case "stop":
     case "unpair":
+    case "delete_all":
       return { type: raw["type"] };
     case "start":
       return str(raw["task"], 500) ? { type: "start", task: raw["task"] } : undefined;

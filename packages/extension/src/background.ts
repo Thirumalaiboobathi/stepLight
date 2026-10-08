@@ -1,4 +1,4 @@
-import { LocalRunStore, normalizeSettings, type KeyValueStore, type Settings } from "@steplight/core";
+import { LocalRunStore, configureRedaction, normalizeSettings, type KeyValueStore, type Settings } from "@steplight/core";
 import { createMessageHandler, type BackgroundDeps, type Session } from "./background-logic.js";
 import { SERVER_URL } from "./messages.js";
 import { NetworkCollector, type WebRequestDetails } from "./network-collector.js";
@@ -33,16 +33,55 @@ async function getToken(): Promise<string | undefined> {
 /* ---------- settings (cached; refreshed when they change) ---------- */
 
 let settingsCache: Settings | undefined;
+
+/** Apply settings that other parts depend on: custom redaction patterns and the storage budget. */
+function applySettings(settings: Settings): void {
+  settingsCache = settings;
+  configureRedaction({ customPatterns: settings.customPatterns });
+  local.setMaxBytes(settings.maxStorageMB * 1024 * 1024);
+}
+
 async function getSettings(): Promise<Settings> {
   if (!settingsCache) {
     const stored = await chrome.storage.local.get(SETTINGS_KEY);
-    settingsCache = normalizeSettings(stored[SETTINGS_KEY]);
+    applySettings(normalizeSettings(stored[SETTINGS_KEY]));
   }
-  return settingsCache;
+  return settingsCache!;
 }
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && changes[SETTINGS_KEY]) settingsCache = normalizeSettings(changes[SETTINGS_KEY].newValue);
+  if (area === "local" && changes[SETTINGS_KEY]) {
+    applySettings(normalizeSettings(changes[SETTINGS_KEY].newValue));
+    void deps.runRetention?.(cachedSession?.runId);
+  }
 });
+
+/** Retention: delete runs older than the configured number of days (0 = keep). */
+async function runRetention(activeRunId?: string): Promise<void> {
+  const { retentionDays } = await getSettings();
+  if (retentionDays > 0) await local.deleteOlderThan(Date.now() - retentionDays * 86_400_000, activeRunId);
+}
+
+/* ---------- recording indicator: toolbar badge, and a message to every page ---------- */
+
+async function showBadge(on: boolean): Promise<void> {
+  try {
+    await chrome.action.setBadgeText({ text: on ? "REC" : "" });
+    if (on) await chrome.action.setBadgeBackgroundColor({ color: "#dc2626" });
+    await chrome.action.setTitle({ title: on ? "Steplight is recording this browser tab" : "Steplight" });
+  } catch {
+    /* cosmetic only */
+  }
+}
+
+async function tellPagesStopped(): Promise<void> {
+  try {
+    for (const tab of await chrome.tabs.query({})) {
+      if (tab.id !== undefined) chrome.tabs.sendMessage(tab.id, { type: "stopped" }).catch(() => undefined);
+    }
+  } catch {
+    /* cosmetic only */
+  }
+}
 
 /* ---------- session: kept in memory, persisted shortly after each change ---------- */
 
@@ -73,6 +112,13 @@ const deps: BackgroundDeps = {
     else await chrome.storage.session.remove(TOKEN_KEY);
   },
   settings: getSettings,
+  runRetention,
+  async deleteAll() {
+    await chrome.storage.session.remove([TOKEN_KEY, "session"]);
+    cachedSession = undefined;
+    await showBadge(false);
+    await tellPagesStopped();
+  },
   async activeTab() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     return tab ? { ...(tab.id !== undefined ? { id: tab.id } : {}), ...(tab.url ? { url: tab.url } : {}) } : undefined;
@@ -132,14 +178,24 @@ const deps: BackgroundDeps = {
       console.warn("[steplight] could not register content scripts on all sites:", err);
     }
     await injectIntoActiveTab().catch((err) => console.warn("[steplight] inject failed:", err));
+    await showBadge(true);
   },
   async disableRecorder() {
     await unregisterAll();
+    await showBadge(false);
+    await tellPagesStopped();
   },
   now: () => Date.now(),
 };
 
 const handle = createMessageHandler(deps);
+
+// On every service-worker start: restore the recording badge and enforce retention.
+void ensureSessionLoaded().then(async () => {
+  await getSettings();
+  await showBadge(cachedSession !== undefined);
+  await runRetention(cachedSession?.runId);
+});
 
 /* ---------- messages from the popup and content scripts ---------- */
 
@@ -192,5 +248,12 @@ async function onSpaNavigation(d: { tabId: number; frameId: number; url: string 
   // Ask the content script to re-read the page: a new route may show (or hide) different text.
   chrome.tabs.sendMessage(d.tabId, { type: "rescan" }).catch(() => undefined);
 }
+// Keep track of which page the recorded tab is on even when its content script is not allowed to
+// report (a denied site): site rules for background requests are judged by the page's URL.
+chrome.webNavigation.onCommitted.addListener((d) => {
+  void ensureSessionLoaded().then(() => {
+    if (d.frameId === 0 && cachedSession?.tabId === d.tabId) cachedSession.tabUrl = d.url;
+  });
+});
 chrome.webNavigation.onHistoryStateUpdated.addListener((d) => void onSpaNavigation(d, "history"));
 chrome.webNavigation.onReferenceFragmentUpdated.addListener((d) => void onSpaNavigation(d, "fragment"));

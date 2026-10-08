@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import type { Run, RunSummary } from "@steplight/core";
-import { buildBundle, copyText, downloadText, fetchRun, fetchRuns, importRunFile } from "./api";
+import { buildBundle, copyText, deleteAllRuns, downloadText, fetchRun, fetchRuns, importRunFile } from "./api";
 import { ComparePanel } from "./components/ComparePanel";
 import { generatePlaywrightTest, renderHtmlReport } from "@steplight/core";
 import { Logo } from "./components/Logo";
@@ -34,6 +34,7 @@ export default function App() {
   const [compare, setCompare] = useState(false);
   const [compareId, setCompareId] = useState<string | undefined>();
   const [notice, setNotice] = useState<string | undefined>();
+  const [armDelete, setArmDelete] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const autoIndexFor = useRef<string | undefined>(undefined);
   const stepsRef = useRef(0);
@@ -167,6 +168,24 @@ export default function App() {
     }
   };
 
+  const onDeleteAll = async () => {
+    if (!armDelete) {
+      setArmDelete(true);
+      setTimeout(() => setArmDelete(false), 5000);
+      return;
+    }
+    setArmDelete(false);
+    try {
+      const n = await deleteAllRuns();
+      setRun(undefined);
+      setRunId(undefined);
+      setRuns([]);
+      setNotice(`Deleted ${n} run${n === 1 ? "" : "s"}.`);
+    } catch (e) {
+      setNotice(`Delete failed: ${(e as Error).message}`);
+    }
+  };
+
   const step = run?.steps[index];
 
   return (
@@ -245,6 +264,14 @@ export default function App() {
             }`}
           >
             {replaying ? "⏸ Pause" : "▶ Replay"}
+          </button>
+          <button
+            data-testid="delete-all"
+            onClick={() => void onDeleteAll()}
+            title="Permanently delete every stored run"
+            className="rounded-lg border border-red-300 px-3 py-1.5 text-sm text-red-700 dark:border-red-900 dark:text-red-300"
+          >
+            {armDelete ? "Click again to delete all" : "Delete all data"}
           </button>
           <button
             aria-label="Toggle dark mode"

@@ -61,7 +61,9 @@ export type ExtensionMessage =
   | { type: "status" }
   /** Store the CLI session token from the pairing link printed by `steplight view`. */
   | { type: "pair"; link: string }
-  | { type: "unpair" };
+  | { type: "unpair" }
+  /** Delete every stored run, the pairing token and any recording in progress. */
+  | { type: "delete_all" };
 
 /** Where recorded steps go. */
 export type ConnectionMode = "standalone" | "connected";
@@ -76,6 +78,10 @@ export interface StatusReply {
   mode: ConnectionMode;
   /** True when a CLI session token is stored (connected mode needs it). */
   paired?: boolean;
+  /** Why recording is paused on the current tab (site rules), if it is. */
+  paused?: string;
+  /** Capture level in effect. */
+  captureLevel?: "minimal" | "standard" | "full";
   error?: string;
 }
 

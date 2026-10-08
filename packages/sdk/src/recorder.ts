@@ -3,6 +3,7 @@ import type { Frame, Page, Request, WebSocket } from "playwright";
 import {
   RunWriter,
   analyzeStep,
+  applyCaptureLevel,
   buildDiagnosis,
   collectFailureContext,
   collectPageScan,
@@ -17,6 +18,7 @@ import {
   truncate,
   MAX_BODY_PREVIEW,
   DEFAULT_RUNS_DIR,
+  type CaptureLevel,
   type FailureDiagnosis,
   type PageScan,
   type Run,
@@ -47,6 +49,13 @@ export interface RecordOptions {
   otel?: boolean;
   /** Extra key/value metadata stored on the run. */
   meta?: Record<string, string>;
+  /**
+   * How much to write to disk (default `"standard"`): `"minimal"` = URLs without query strings, step
+   * kinds and flags only; `"standard"` = also redacted page text and request metadata, no request
+   * bodies; `"full"` = also redacted request body previews. Detectors always see the full data in
+   * memory first, and secrets are redacted at every level.
+   */
+  captureLevel?: CaptureLevel;
 }
 
 /** Handle for an in-progress recording. */
@@ -131,7 +140,8 @@ class Recorder implements RunHandle {
     const cause = inferCausedBy(step, this.steps);
     if (cause) step.causedBy = cause;
     this.steps.push(step);
-    await this.writer.addStep(step, snapshotText);
+    const shaped = applyCaptureLevel(step, snapshotText, this.options.captureLevel ?? "standard");
+    await this.writer.addStep(shaped.step, shaped.snapshot);
     return step;
   }
 

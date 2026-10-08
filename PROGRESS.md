@@ -6,7 +6,7 @@
 |---|---|
 | A. Existing attack surfaces | ✅ report CSP (hashed, no network), viewer CSP header, extension-page CSP, XSS tests (viewer + report, 6 payload families), CLI session token + pairing, Host/Origin checks, 5 MB limit, rate limit, zod ingest schema, id validation, extension sender + message validation (+ 59 security tests) |
 | B. Network capture + SPA | ✅ webRequest capture (tab-scoped, header allowlist, body analysed in memory), `networkExfil` detector (URL/body secrets, copied page text, beacon after hidden instruction), opt-in MAIN-world deep capture, SPA navigation + debounced re-scan, 5 new red-team pages, SDK parity, viewer/report request metadata, real-Chromium e2e for each page + analytics control + perf test |
-| C. Privacy controls | ⏳ |
+| C. Privacy controls | ✅ capture levels (min/standard/full) in extension + SDK, always-on never-capture fields, site allow/deny lists + first-run suggestions + "paused" status, redaction engine rewrite (20+ kinds, encodings, custom patterns with ReDoS checks, fast-check fuzzing), redaction at the source, retention (extension 7 days; `steplight purge`), delete-all (settings page, viewer, `/api/purge`), REC badge + page pill, settings page |
 | D. Encryption at rest | ⏳ |
 | E. Enterprise controls | ⏳ |
 | F. Supply chain | ⏳ |

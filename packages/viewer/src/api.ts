@@ -107,6 +107,24 @@ export async function importRunFile(text: string): Promise<string> {
   return body.id;
 }
 
+/** Delete every stored run ("Delete all Steplight data"). Returns how many runs were removed. */
+export async function deleteAllRuns(): Promise<number> {
+  if (inExtension) {
+    const count = (await localStore().listRuns()).length;
+    await localStore().clear();
+    return count;
+  }
+  const res = await fetch("/api/purge", {
+    method: "POST",
+    headers: { ...authHeaders(), "content-type": "application/json" },
+    body: JSON.stringify({ all: true }),
+  });
+  if (res.status === 401) throw new Error(AUTH_HINT);
+  const body = (await res.json()) as { deleted?: number; error?: string };
+  if (!res.ok) throw new Error(body.error ?? `delete failed (${res.status})`);
+  return body.deleted ?? 0;
+}
+
 /** Trigger a browser download of text content. */
 export function downloadText(filename: string, text: string, type = "application/json"): void {
   const url = URL.createObjectURL(new Blob([text], { type }));

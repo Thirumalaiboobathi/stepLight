@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Steplight privacy settings</title>
+    <link rel="stylesheet" href="settings.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Steplight privacy settings</h1>
+      <p class="lead">
+        Everything stays on this device. These settings decide how much of a browsing session Steplight keeps.
+        <span id="managedNote" class="managed" hidden>Some settings are managed by your organization.</span>
+      </p>
+
+      <section id="firstRun" hidden>
+        <h2>Skip sensitive sites?</h2>
+        <p>
+          Recording is rarely a good idea on banking sites, health portals and password managers. You can add a
+          suggested list of such sites to your deny list; nothing is recorded on denied sites.
+        </p>
+        <button id="suggest" type="button">Add suggested sites to the deny list</button>
+        <button id="dismissSuggest" type="button" class="secondary">No thanks</button>
+      </section>
+
+      <section>
+        <h2>What is captured</h2>
+        <fieldset id="levels">
+          <label class="choice">
+            <input type="radio" name="level" value="minimal" />
+            <span><strong>Minimal</strong> URLs (query strings removed), step kinds and flags only. No page text, no request details, no bodies.</span>
+          </label>
+          <label class="choice">
+            <input type="radio" name="level" value="standard" />
+            <span><strong>Standard</strong> (default) Also redacted page text and request metadata (method, type, status, size). No request bodies.</span>
+          </label>
+          <label class="choice">
+            <input type="radio" name="level" value="full" />
+            <span><strong>Full</strong> Also redacted request body previews. Redaction is pattern-based and can miss free text such as names and addresses.</span>
+          </label>
+        </fieldset>
+        <p class="note">
+          Always on, whatever you choose: password fields, payment-card and one-time-code fields, and fields named like
+          card / CVV / OTP / PIN / SSN / Aadhaar / PAN are never read, and anything editable inside a payment provider's frame.
+          Secrets (emails, cards, API keys, tokens…) are redacted before they leave the page.
+        </p>
+      </section>
+
+      <section>
+        <h2>Sites</h2>
+        <label for="deny">Never record these sites (one per line, e.g. <code>mybank.com</code> or <code>*.hospital.org</code>)</label>
+        <textarea id="deny" rows="5" spellcheck="false"></textarea>
+        <label for="allow">Only record these sites (leave empty to record any site that is not denied)</label>
+        <textarea id="allow" rows="3" spellcheck="false"></textarea>
+        <label for="netallow">Trusted third-party domains for network checks (analytics you use yourself; their traffic is downgraded to low)</label>
+        <textarea id="netallow" rows="3" spellcheck="false"></textarea>
+      </section>
+
+      <section>
+        <h2>Extra redaction patterns</h2>
+        <label for="patterns">Regular expressions, one per line (e.g. <code>EMP-\d{6}</code>). Matches are replaced by [REDACTED:custom].</label>
+        <textarea id="patterns" rows="3" spellcheck="false"></textarea>
+        <p class="note">Patterns that could hang the browser (nested repetition, very slow on adversarial text) are rejected.</p>
+        <ul id="patternErrors" class="errors"></ul>
+      </section>
+
+      <section>
+        <h2>Network capture</h2>
+        <label class="choice">
+          <input id="deep" type="checkbox" />
+          <span>
+            <strong>Deep capture</strong> (off by default). Hooks <code>fetch</code>, <code>XMLHttpRequest</code>,
+            <code>sendBeacon</code> and <code>WebSocket</code> inside the page to see payloads before they are encoded.
+            Needs access to all sites. A hostile page can notice or interfere with the hooks; keep this off unless you need it.
+          </span>
+        </label>
+        <label class="choice">
+          <input id="indicator" type="checkbox" />
+          <span><strong>Show a small “Steplight is recording” badge</strong> in the corner of recorded pages.</span>
+        </label>
+      </section>
+
+      <section>
+        <h2>Retention</h2>
+        <label for="days">Delete runs older than (days, 0 keeps them)</label>
+        <input id="days" type="number" min="0" max="3650" />
+        <label for="maxmb">Maximum storage for runs in the extension (MB)</label>
+        <input id="maxmb" type="number" min="1" max="1024" />
+      </section>
+
+      <div class="actions">
+        <button id="save" type="button">Save settings</button>
+        <span id="saved" role="status"></span>
+      </div>
+
+      <section class="danger">
+        <h2>Your data</h2>
+        <p>
+          Deletes every run stored in the extension, the CLI pairing and any recording in progress. Files written
+          by the CLI or SDK on disk are not touched (use <code>steplight purge</code> for those).
+        </p>
+        <button id="deleteAll" type="button" class="danger-btn">Delete all Steplight data</button>
+        <span id="deleted" role="status"></span>
+      </section>
+    </main>
+    <script src="settings.js"></script>
+  </body>
+</html>

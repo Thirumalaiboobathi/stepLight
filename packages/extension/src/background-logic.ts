@@ -1,15 +1,13 @@
 import {
   DEFAULT_SETTINGS,
   analyzeStep,
+  applyCaptureLevel,
   inferCausedBy,
   newRunId,
   newStepId,
   recordingBlockedReason,
   redactText,
-  sanitizeBody,
-  sanitizeSnapshot,
   siteOf,
-  stripQuery,
   type LocalRunStore,
   type Settings,
   type Step,
@@ -62,6 +60,10 @@ export interface BackgroundDeps {
   settings?(): Promise<Settings>;
   /** The tab to record (the active tab at start). */
   activeTab?(): Promise<{ id?: number; url?: string } | undefined>;
+  /** Delete runs past the retention period (never the run in progress). */
+  runRetention?(activeRunId?: string): Promise<void>;
+  /** "Delete all Steplight data": runs, pairing token and recording state. */
+  deleteAll?(): Promise<void>;
   /** CLI session token store (optional; tests that do not pair can omit it). */
   getToken?(): Promise<string | undefined>;
   setToken?(token: string | undefined): Promise<void>;
@@ -166,26 +168,6 @@ function networkKey(event: Extract<PageEventMsg, { kind: "network" }>): string {
   return `${event.method.toUpperCase()} ${event.url}`;
 }
 
-/** Shape a step for storage according to the capture level (data minimisation). */
-function shapeForLevel(step: Step, snapshot: string | undefined, settings: Settings): { step: Step; snapshot?: string } {
-  const out: Step = { ...step };
-  if (settings.captureLevel === "minimal") {
-    if (out.url) out.url = stripQuery(out.url);
-    delete out.targetText;
-    delete out.diagnosis;
-    delete out.error;
-    if (out.request) out.request = { method: out.request.method, url: stripQuery(out.request.url) };
-    return { step: out };
-  }
-  if (out.request) {
-    const req = { ...out.request };
-    if (settings.captureLevel === "full" && req.bodyPreview !== undefined) req.bodyPreview = sanitizeBody(req.bodyPreview);
-    else delete req.bodyPreview; // "standard": the body was analysed in memory and is not kept
-    out.request = req;
-  }
-  return { step: out, ...(snapshot !== undefined ? { snapshot: sanitizeSnapshot(snapshot) } : {}) };
-}
-
 /**
  * Turn a content-script (or browser network) event into zero or more ingest messages, updating
  * the session. Detectors run on the raw data in memory; what is stored depends on the capture
@@ -211,7 +193,7 @@ export function recordEvent(
     const cause = inferCausedBy(step, session.steps);
     if (cause) step.causedBy = cause;
     // The in-memory history keeps the shaped step (no bodies), like the stored copy.
-    const shaped = shapeForLevel(step, built.snapshot, settings);
+    const shaped = applyCaptureLevel(step, built.snapshot, settings.captureLevel);
     session.steps.push(shaped.step);
     out.push({
       type: "step",
@@ -362,6 +344,7 @@ export async function handleMessage(
         await deps.disableRecorder();
         await deps.save(undefined);
         const endedAt = deps.now();
+        await deps.runRetention?.();
         const leftovers = flushHeld(session, await settingsOf(deps));
         if (leftovers.length > 0) {
           if (session.mode === "standalone") await storeLocally(session.runId, leftovers, deps);
@@ -389,8 +372,24 @@ export async function handleMessage(
         await deps.save(session);
         return reply(session);
       }
-      case "status":
-        return reply(session, session ? undefined : await mode(deps), deps.getToken ? await paired(deps) : undefined);
+      case "status": {
+        await deps.runRetention?.(session?.runId);
+        const settings = await settingsOf(deps);
+        const tab = await deps.activeTab?.();
+        const paused = recordingBlockedReason(tab?.url, settings);
+        return {
+          ...reply(session, session ? undefined : await mode(deps), deps.getToken ? await paired(deps) : undefined),
+          captureLevel: settings.captureLevel,
+          ...(paused ? { paused } : {}),
+        };
+      }
+      case "delete_all": {
+        if (session) await deps.disableRecorder();
+        await deps.save(undefined);
+        await deps.deleteAll?.();
+        await deps.local.clear();
+        return reply(undefined, await mode(deps), false);
+      }
       case "pair": {
         const token = parsePairingToken(message.link);
         if (!token) return { ...reply(session), error: "That does not look like a Steplight pairing link." };

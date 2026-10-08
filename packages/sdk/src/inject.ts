@@ -24,7 +24,7 @@ export interface PageEvent {
 /**
  * Page-side script: reports clicks, field changes and form submissions through the
  * binding. Self-contained (serialised by Playwright). Never throws into the host page.
- * Password and file field values are never read.
+ * Password, payment-card, OTP and similar field values are never read (see neverCapture.ts); file fields neither.
  */
 export function installPageListeners(bindingName: string): void {
   const w: any = globalThis;
@@ -38,6 +38,22 @@ export function installPageListeners(bindingName: string): void {
       /* fail open */
     }
   };
+  // "Never capture" rule (always on): mirrors core/neverCapture.ts (kept in sync by a test);
+  // repeated here because this function is serialised into the page.
+  const NEVER_NAME = /(^|[^a-z0-9])(card|cc|cvv|cvc|csc|otp|pin|ssn|aadhaar|aadhar|pan|passcode|password|passwd|pwd|iban|secret|token|csrf)\d{0,2}([^a-z0-9]|$)|cardnum|creditcard|ccnum|cvv2|cardno|panno|aadhaarno/i;
+  const NEVER_AUTO = /(^|\s)(cc-[a-z-]+|one-time-code|current-password|new-password)(\s|$)/i;
+  const neverField = (e: any): boolean => {
+    if (!e || !e.tagName) return false;
+    const tag = String(e.tagName).toLowerCase();
+    if (!(tag === "input" || tag === "textarea" || tag === "select" || e.isContentEditable === true)) return false;
+    if (String(e.type || "").toLowerCase() === "password") return true;
+    if (NEVER_AUTO.test(String(e.getAttribute("autocomplete") || ""))) return true;
+    const words = [e.name, e.id, e.getAttribute("aria-label"), e.getAttribute("placeholder")]
+      .filter(Boolean)
+      .map((v: any) => String(v).replace(/([a-z0-9])([A-Z])/g, "$1_$2"))
+      .join(" ");
+    return words !== "" && NEVER_NAME.test(words);
+  };
   const selectorOf = (el: any): string => {
     if (!el || !el.tagName) return "";
     const tag = String(el.tagName).toLowerCase();
@@ -48,11 +64,12 @@ export function installPageListeners(bindingName: string): void {
     return cls ? `${tag}.${cls}` : tag;
   };
   const textOf = (el: any): string => {
+    const isButtonInput = String(el.tagName).toLowerCase() === "input" && /^(button|submit|reset|image)$/i.test(String(el.type || ""));
     const t =
       (el.getAttribute && (el.getAttribute("aria-label") || el.getAttribute("title"))) ||
-      el.innerText ||
-      el.value ||
-      el.textContent ||
+      (neverField(el) ? "" : el.innerText) ||
+      (isButtonInput ? el.value : "") ||
+      (neverField(el) ? "" : el.textContent) ||
       "";
     return String(t).replace(/\s+/g, " ").trim().slice(0, 200);
   };
@@ -75,8 +92,8 @@ export function installPageListeners(bindingName: string): void {
       const type = String(el.type || "").toLowerCase();
       if ((type === "checkbox" || type === "radio") && !el.checked) continue;
       if (type === "submit" || type === "button" || type === "file") continue;
-      const value = type === "password" ? "[password]" : String(el.value ?? "");
-      parts.push(`${encodeURIComponent(el.name)}=${encodeURIComponent(value)}`);
+      if (neverField(el)) continue; // never read, not even the name
+      parts.push(`${encodeURIComponent(el.name)}=${encodeURIComponent(String(el.value ?? ""))}`);
     }
     return parts.join("&");
   };

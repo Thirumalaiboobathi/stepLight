@@ -100,6 +100,7 @@ describe("XSS payloads in snapshots, URLs, selectors, bodies, task titles and ev
     page.on("console", (m) => m.text().includes("Content Security Policy") && cspViolations.push(m.text()));
     await page.goto(`${base}/#token=${server.token}`);
     await page.getByTestId("run-item").first().click();
+    await page.getByTestId("step-item").first().waitFor();
     const count = await page.getByTestId("step-item").count();
     expect(count).toBe(3);
     for (let i = 0; i < count; i++) {

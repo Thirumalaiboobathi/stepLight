@@ -99,3 +99,9 @@ export const ingestSchema = z.discriminatedUnion("type", [
 ]);
 
 export type ParsedIngest = z.infer<typeof ingestSchema>;
+
+/** Body of `POST /api/purge`: delete everything, or runs older than N days. */
+export const purgeSchema = z.union([
+  z.object({ all: z.literal(true) }),
+  z.object({ olderThanDays: z.number().int().min(0).max(3650) }),
+]);

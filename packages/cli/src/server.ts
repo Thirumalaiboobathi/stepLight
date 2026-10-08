@@ -10,13 +10,14 @@ import {
   listRuns,
   newRunId,
   parseBundle,
+  purgeRuns,
   writeRun,
   readRun,
   readSnapshot,
   type Run,
   type Step,
 } from "@steplight/core/node";
-import { ingestSchema } from "./ingestSchema.js";
+import { ingestSchema, purgeSchema } from "./ingestSchema.js";
 
 /** Options for {@link createViewerServer}. */
 export interface ServerOptions {
@@ -214,6 +215,20 @@ export function createViewerServer(options: ServerOptions): ViewerServer {
       }
       await ingest(parsed.data as IngestMessage);
       return json(res, 200, { ok: true });
+    }
+    if (req.method === "POST" && url.pathname === "/api/purge") {
+      let raw: unknown;
+      try {
+        raw = JSON.parse(await readBody(req, 4096));
+      } catch (err) {
+        if (err instanceof HttpError) throw err;
+        throw new HttpError(400, "invalid JSON");
+      }
+      const parsed = purgeSchema.safeParse(raw);
+      if (!parsed.success) throw new HttpError(400, "send { all: true } or { olderThanDays: <number> }");
+      const deleted = await purgeRuns(options.runsDir, parsed.data);
+      for (const id of deleted) writers.delete(id);
+      return json(res, 200, { deleted: deleted.length });
     }
     if (req.method === "POST" && url.pathname === "/api/import") {
       const bundle = parseBundle(await readBody(req, maxImport));

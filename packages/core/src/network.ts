@@ -1,6 +1,6 @@
 import { registrableDomain } from "./domain.js";
 import { bodyValues, type HistoryPage } from "./detectors/crossDomainData.js";
-import { findSensitive, maskSensitive } from "./redact.js";
+import { describeKind, findSensitive, maskSensitive } from "./redact.js";
 import type { Flag, Step } from "./types.js";
 
 /* ---------- headers ---------- */
@@ -149,8 +149,6 @@ export interface NetworkDetectorOptions {
 const BEACON_TYPES = new Set(["ping", "image", "websocket", "beacon"]);
 const MIN_COPIED_LENGTH = 8;
 
-const LABELS = { email: "an email address", card: "a card-like number", api_key: "an API key", jwt: "a JWT" } as const;
-
 /**
  * Detect data leaving through background requests (fetch, XHR, beacons, pixels, WebSockets).
  * - Sensitive patterns (email, card, key, JWT) anywhere in the URL (path or query) or body: `critical`
@@ -179,8 +177,9 @@ export function networkExfil(
   const where = req.resourceType === "websocket" ? "WebSocket" : "Request";
 
   // 1. Sensitive patterns in the URL (pixel / GET exfiltration) or the body.
-  const inUrl = findSensitive(decodedUrlText(req.url));
-  const inBody = req.bodyPreview ? findSensitive(req.bodyPreview) : [];
+  const credentials = third; // a password / secret parameter is only a leak when it goes to another site
+  const inUrl = findSensitive(decodedUrlText(req.url), { credentials });
+  const inBody = req.bodyPreview ? findSensitive(req.bodyPreview, { credentials }) : [];
   const seen = new Set<string>();
   for (const [place, matches] of [["URL", inUrl], ["body", inBody]] as const) {
     for (const m of matches) {
@@ -191,7 +190,7 @@ export function networkExfil(
       flags.push({
         type: "sensitive_data_outbound",
         severity: lowEmail ? "low" : "critical",
-        message: `${where} to ${target} carries ${LABELS[m.kind]} in its ${place}`,
+        message: `${where} to ${target} carries ${describeKind(m.kind)} in its ${place}`,
         evidence: `${m.kind}: ${maskSensitive(m)} (${place})`,
       });
     }
