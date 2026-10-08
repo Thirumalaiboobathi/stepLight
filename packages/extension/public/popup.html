@@ -14,17 +14,20 @@
       button.stop { background: #dc2626; }
       #state { margin-top: 10px; font-size: 12px; }
       #error { margin-top: 6px; font-size: 12px; color: #dc2626; }
+      .mode { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; vertical-align: middle; }
+      .mode.connected { background: #d1fae5; color: #065f46; }
+      .mode.standalone { background: #e0e7ff; color: #3730a3; }
       a { display: inline-block; margin-top: 10px; font-size: 12px; }
     </style>
   </head>
   <body>
-    <h1>🔦 Steplight</h1>
+    <h1>Steplight <span id="mode" class="mode standalone">Standalone</span></h1>
     <label for="task">Task name</label>
     <input id="task" placeholder="e.g. Book the cheapest flight" />
     <button id="toggle" class="start">Start recording</button>
     <div id="state">Not recording</div>
     <div id="error"></div>
-    <a id="viewer" href="http://localhost:4777" target="_blank" rel="noreferrer">Open viewer ↗</a>
+    <a id="viewer" href="#">Open viewer ↗</a>
     <script src="popup.js"></script>
   </body>
 </html>

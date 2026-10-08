@@ -6,11 +6,12 @@ import {
   redactText,
   sanitizeBody,
   sanitizeSnapshot,
+  type LocalRunStore,
   type Step,
   type StepKind,
 } from "@steplight/core";
 import type { IngestMessage } from "./ingest-types.js";
-import type { ExtensionMessage, PageEventMsg, StatusReply } from "./messages.js";
+import type { ConnectionMode, ExtensionMessage, PageEventMsg, StatusReply } from "./messages.js";
 
 /** Recording state kept in extension storage so it survives service-worker restarts. */
 export interface Session {
@@ -21,14 +22,20 @@ export interface Session {
   /** Recent page texts used by the cross-domain detector (kept small). */
   pages: { url?: string; text: string }[];
   lastNavUrl?: string;
+  /** Where steps go: the CLI server, or the extension's own storage. */
+  mode: ConnectionMode;
 }
 
 /** Everything the service worker needs from the outside world (injected for testing). */
 export interface BackgroundDeps {
   load(): Promise<Session | undefined>;
   save(session: Session | undefined): Promise<void>;
-  /** Deliver a message to the local Steplight server. May reject. */
+  /** Deliver a message to the local Steplight server. May reject (server not running). */
   post(message: IngestMessage): Promise<void>;
+  /** True when the local Steplight server answers. Never rejects. */
+  probe(): Promise<boolean>;
+  /** Extension-local run storage used in standalone mode. */
+  local: LocalRunStore;
   /** Make the content script run on all pages (after permission is granted). */
   enableRecorder(): Promise<void>;
   disableRecorder(): Promise<void>;
@@ -151,41 +158,87 @@ export async function handleMessage(
           startedAt: deps.now(),
           steps: [],
           pages: [],
+          mode: "connected",
         };
-        await deps.post({
-          type: "run_start",
-          run: { id: next.runId, task: next.task, startedAt: next.startedAt, meta: { source: "chrome-extension" } },
-        });
+        const meta = { source: "chrome-extension" };
+        try {
+          await deps.post({
+            type: "run_start",
+            run: { id: next.runId, task: next.task, startedAt: next.startedAt, meta },
+          });
+        } catch {
+          next.mode = "standalone"; // CLI server not running: keep the run in the extension
+          await deps.local.startRun({ id: next.runId, task: next.task, startedAt: next.startedAt, meta });
+        }
         await deps.enableRecorder();
         await deps.save(next);
         return reply(next);
       }
       case "stop": {
-        if (!session) return reply(undefined);
+        if (!session) return reply(undefined, await mode(deps));
         await deps.disableRecorder();
         await deps.save(undefined);
-        await deps.post({ type: "run_end", runId: session.runId, status: "success", endedAt: deps.now() });
-        return { recording: false, steps: session.steps.length };
+        const endedAt = deps.now();
+        if (session.mode === "standalone") {
+          await deps.local.finishRun(session.runId, "success", endedAt);
+        } else {
+          await deps.post({ type: "run_end", runId: session.runId, status: "success", endedAt }).catch(() => undefined);
+        }
+        return { recording: false, steps: session.steps.length, mode: session.mode };
       }
       case "event": {
-        if (!session) return reply(undefined);
+        if (!session) return reply(undefined, await mode(deps));
         const messages = recordEvent(session, message.event);
+        if (session.mode === "connected") {
+          try {
+            for (const m of messages) await deps.post(m);
+          } catch {
+            await fallBackToLocal(session, messages, deps);
+          }
+        } else {
+          await storeLocally(session.runId, messages, deps);
+        }
         await deps.save(session);
-        for (const m of messages) await deps.post(m);
         return reply(session);
       }
       case "status":
-        return reply(session);
+        return reply(session, session ? undefined : await mode(deps));
     }
   } catch (err) {
     return { ...reply(session), error: describe(err) };
   }
 }
 
-function reply(session: Session | undefined): StatusReply {
+async function mode(deps: BackgroundDeps): Promise<ConnectionMode> {
+  return (await deps.probe()) ? "connected" : "standalone";
+}
+
+async function storeLocally(runId: string, messages: IngestMessage[], deps: BackgroundDeps): Promise<void> {
+  for (const m of messages) {
+    if (m.type === "step") await deps.local.addStep(runId, m.step, m.snapshot);
+  }
+}
+
+/** The server disappeared mid-run: continue in extension storage, keeping steps seen so far. */
+async function fallBackToLocal(session: Session, pending: IngestMessage[], deps: BackgroundDeps): Promise<void> {
+  session.mode = "standalone";
+  await deps.local.startRun({
+    id: session.runId,
+    task: session.task,
+    startedAt: session.startedAt,
+    meta: { source: "chrome-extension", note: "server connection lost; earlier snapshots not kept" },
+  });
+  const pendingIds = new Set(pending.flatMap((m) => (m.type === "step" ? [m.step.id] : [])));
+  for (const step of session.steps) {
+    if (!pendingIds.has(step.id)) await deps.local.addStep(session.runId, step);
+  }
+  await storeLocally(session.runId, pending, deps);
+}
+
+function reply(session: Session | undefined, idleMode: ConnectionMode = "standalone"): StatusReply {
   return session
-    ? { recording: true, task: session.task, runId: session.runId, steps: session.steps.length }
-    : { recording: false, steps: 0 };
+    ? { recording: true, task: session.task, runId: session.runId, steps: session.steps.length, mode: session.mode }
+    : { recording: false, steps: 0, mode: idleMode };
 }
 
 /**

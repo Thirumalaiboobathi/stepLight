@@ -22,12 +22,17 @@ export type ExtensionMessage =
   | { type: "stop" }
   | { type: "status" };
 
+/** Where recorded steps go. */
+export type ConnectionMode = "standalone" | "connected";
+
 /** Reply to popup requests. */
 export interface StatusReply {
   recording: boolean;
   task?: string;
   runId?: string;
   steps: number;
+  /** "connected" = sending to the CLI server, "standalone" = storing in the extension. */
+  mode: ConnectionMode;
   error?: string;
 }
 

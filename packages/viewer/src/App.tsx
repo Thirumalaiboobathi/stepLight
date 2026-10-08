@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import type { Run, RunSummary } from "@steplight/core";
-import { fetchRun, fetchRuns } from "./api";
+import { buildBundle, downloadText, fetchRun, fetchRuns, importRunFile } from "./api";
+import { Logo } from "./components/Logo";
 import { RunList } from "./components/RunList";
 import { StepDetail } from "./components/StepDetail";
 import { Timeline } from "./components/Timeline";
@@ -26,6 +27,8 @@ export default function App() {
   const [replaying, setReplaying] = useState(false);
   const [dark, setDark] = useState(initialDark);
   const [error, setError] = useState<string | undefined>();
+  const [notice, setNotice] = useState<string | undefined>();
+  const fileRef = useRef<HTMLInputElement>(null);
   const stepsRef = useRef(0);
   stepsRef.current = run?.steps.length ?? 0;
 
@@ -98,18 +101,64 @@ export default function App() {
     setIndex(i);
   };
 
+  const exportJson = async () => {
+    if (!run) return;
+    try {
+      const bundle = await buildBundle(run);
+      downloadText(`steplight-${run.id}.json`, JSON.stringify(bundle, null, 2));
+    } catch (e) {
+      setNotice(`Export failed: ${(e as Error).message}`);
+    }
+  };
+  const onImport = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const id = await importRunFile(await file.text());
+      loadRuns();
+      select(id);
+      setNotice(`Imported ${file.name}`);
+    } catch (err) {
+      setNotice((err as Error).message);
+    }
+  };
+
   const step = run?.steps[index];
 
   return (
     <div className="flex min-h-full flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
-        <h1 className="text-lg font-bold tracking-tight">
-          <span aria-hidden>🔦</span> Steplight
+      <header className="sticky top-0 z-10 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
+        <h1 className="flex items-center gap-2 text-lg font-bold tracking-tight">
+          <Logo size={26} /> Steplight
         </h1>
         <span className="hidden text-sm text-slate-500 sm:inline dark:text-slate-400">
           Replay and trace every step your AI agent takes
         </span>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          <input
+            ref={fileRef}
+            data-testid="import-input"
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => void onImport(e)}
+          />
+          <button
+            data-testid="import"
+            onClick={() => fileRef.current?.click()}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700"
+          >
+            Import
+          </button>
+          <button
+            data-testid="export"
+            onClick={() => void exportJson()}
+            disabled={!run}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-40 dark:border-slate-700"
+          >
+            Export JSON
+          </button>
           <button
             data-testid="replay"
             onClick={toggleReplay}
@@ -128,6 +177,15 @@ export default function App() {
         </div>
       </header>
 
+      {notice && (
+        <p
+          data-testid="notice"
+          onClick={() => setNotice(undefined)}
+          className="cursor-pointer bg-indigo-100 px-4 py-2 text-sm text-indigo-900 dark:bg-indigo-950 dark:text-indigo-200"
+        >
+          {notice}
+        </p>
+      )}
       {error && (
         <p className="bg-red-100 px-4 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">
           Cannot reach the Steplight server: {error}

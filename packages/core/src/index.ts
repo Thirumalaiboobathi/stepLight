@@ -9,3 +9,6 @@ export * from "./redact.js";
 export * from "./detectors/index.js";
 export * from "./analyze.js";
 export * from "./collect.js";
+export * from "./sanitize.js";
+export * from "./bundle.js";
+export * from "./localStore.js";

@@ -1,7 +1,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { isSafeId } from "../ids.js";
-import { sanitizeBody, sanitizeSnapshot, redactText } from "../redact.js";
+import { redactText, sanitizeSnapshot } from "../redact.js";
+import { sanitizeStep } from "../sanitize.js";
 import { maxSeverity } from "../severity.js";
 import type { Run, RunSummary, Step } from "../types.js";
 
@@ -11,28 +12,6 @@ export const DEFAULT_RUNS_DIR = path.join(".steplight", "runs");
 function runDir(root: string, runId: string): string {
   if (!isSafeId(runId)) throw new Error(`Unsafe run id: ${runId}`);
   return path.join(root, runId);
-}
-
-/**
- * Return a copy of the step that is safe to write to disk: bodies redacted and
- * truncated, free-text fields redacted.
- * @example const safe = sanitizeStep(step)
- */
-export function sanitizeStep(step: Step): Step {
-  const copy: Step = { ...step, flags: step.flags.map((f) => ({ ...f })) };
-  if (copy.request) {
-    copy.request = { ...copy.request, url: redactText(copy.request.url) };
-    if (copy.request.bodyPreview !== undefined) {
-      copy.request.bodyPreview = sanitizeBody(copy.request.bodyPreview);
-    }
-  }
-  if (copy.targetText !== undefined) copy.targetText = redactText(copy.targetText).slice(0, 300);
-  if (copy.url !== undefined) copy.url = redactText(copy.url);
-  for (const f of copy.flags) {
-    f.evidence = redactText(f.evidence);
-    f.message = redactText(f.message);
-  }
-  return copy;
 }
 
 /** Incrementally writes one run to `<root>/<runId>/`. All data is redacted before writing. */

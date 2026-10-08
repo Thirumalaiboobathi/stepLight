@@ -1,4 +1,4 @@
-# 🔦 Steplight
+# Steplight
 
 **Replay and trace every step your AI agent takes.**
 

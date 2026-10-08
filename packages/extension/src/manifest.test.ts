@@ -17,10 +17,18 @@ describe("manifest.json", () => {
   });
 });
 
+describe("manifest icons", () => {
+  it("declares 16/32/48/128 px icons that exist in public/", () => {
+    expect(Object.keys(manifest.icons).sort()).toEqual(["128", "16", "32", "48"]);
+    expect(manifest.action.default_icon).toEqual(manifest.icons);
+    for (const f of Object.values<string>(manifest.icons)) expect(existsSync(path.join(root, "public", f)), f).toBe(true);
+  });
+});
+
 describe.skipIf(!existsSync(path.join(root, "dist")))("built extension (dist)", () => {
   const dist = path.join(root, "dist");
   it("contains every file the manifest references", () => {
-    const files = [manifest.background.service_worker, manifest.action.default_popup, "content.js", "popup.js"];
+    const files = [manifest.background.service_worker, manifest.action.default_popup, "content.js", "popup.js", "viewer.html", ...Object.values<string>(manifest.icons)];
     for (const f of files) expect(existsSync(path.join(dist, f)), f).toBe(true);
   });
   it("bundles content script as a classic script with no module imports", () => {

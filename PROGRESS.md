@@ -12,6 +12,7 @@ All 7 phases are complete and committed. Acceptance command verified from a fres
 | 5 Viewer + CLI | ✅ |
 | 6 Chrome extension | ✅ |
 | 7 Docs + polish | ✅ |
+| R2-A Store readiness | ✅ standalone mode, import/export, PRIVACY.md, store listing, zip, icons |
 
 ## What works
 

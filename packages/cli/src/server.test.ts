@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import type { Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createBundle, type Run } from "@steplight/core/node";
 import { createViewerServer } from "./server.js";
 
 let dir: string;
@@ -67,6 +68,32 @@ describe("ingest + read API", () => {
     const res = await fetch(`${base}/api/ingest`, { method: "OPTIONS" });
     expect(res.status).toBe(204);
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
+  });
+
+  it("imports an exported run, re-sanitised, and gives duplicates a fresh id", async () => {
+    const run: Run = {
+      id: "imp-1",
+      task: "Imported",
+      startedAt: 5,
+      endedAt: 9,
+      status: "success",
+      meta: {},
+      steps: [
+        { id: "a", runId: "imp-1", index: 0, kind: "page_read", timestamp: 6, flags: [], snapshotRef: "snapshots/a.txt" },
+      ],
+    };
+    const bundle = createBundle(run, { a: "text" });
+    const send = (body: string) => fetch(`${base}/api/import`, { method: "POST", body });
+    const first = (await (await send(JSON.stringify(bundle))).json()) as { id: string };
+    expect(first.id).toBe("imp-1");
+    const second = (await (await send(JSON.stringify(bundle))).json()) as { id: string };
+    expect(second.id).not.toBe("imp-1");
+    expect(await (await fetch(`${base}/api/runs/imp-1/snapshot/a`)).text()).toBe("text");
+    expect(((await (await fetch(`${base}/api/runs`)).json()) as unknown[]).length).toBe(2);
+
+    const bad = await send("{nope");
+    expect(bad.status).toBe(400);
+    expect(((await bad.json()) as { error: string }).error).toContain("Invalid Steplight run file");
   });
 
   it("explains itself when the viewer is not built", async () => {

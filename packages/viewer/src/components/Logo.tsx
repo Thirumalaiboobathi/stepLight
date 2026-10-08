@@ -1,0 +1,19 @@
+/** Steplight logo: a staircase of steps with the top step lit by a beam. */
+export function Logo({ size = 24 }: { size?: number }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 128 128"
+      width={size}
+      height={size}
+      role="img"
+      aria-label="Steplight"
+      data-testid="logo"
+    >
+      <rect width="128" height="128" rx="28" fill="#312e81" />
+      <polygon points="84,50 54,8 114,8" fill="#fde68a" opacity="0.6" />
+      <polygon points="22,104 22,88 46,88 46,72 70,72 70,56 94,56 94,104" fill="#818cf8" />
+      <rect x="70" y="56" width="24" height="16" fill="#fde68a" />
+    </svg>
+  );
+}

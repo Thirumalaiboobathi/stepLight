@@ -1,5 +1,7 @@
 import { SERVER_URL, type ExtensionMessage, type StatusReply } from "./messages.js";
 
+let viewerUrl = chrome.runtime.getURL("viewer.html");
+
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 function ask(message: ExtensionMessage): Promise<StatusReply> {
@@ -16,8 +18,16 @@ function render(status: StatusReply): void {
   $("state").textContent = status.recording
     ? `● Recording · ${status.steps} steps`
     : "Not recording";
+  const connected = status.mode === "connected";
+  const badge = $("mode");
+  badge.textContent = connected ? "Connected to CLI" : "Standalone";
+  badge.className = connected ? "mode connected" : "mode standalone";
+  badge.title = connected
+    ? "Steps are sent to the Steplight CLI server on localhost:4777."
+    : "No CLI server found. Runs are stored inside the extension and viewed in the bundled viewer.";
+  viewerUrl = connected ? SERVER_URL : chrome.runtime.getURL("viewer.html");
   $("error").textContent = status.error
-    ? `${status.error} — is "steplight view" running on ${SERVER_URL}?`
+    ? status.error
     : "";
 }
 
@@ -41,6 +51,9 @@ async function toggle(): Promise<void> {
 }
 
 $("toggle").addEventListener("click", () => void toggle());
-$<HTMLAnchorElement>("viewer").href = SERVER_URL;
+$("viewer").addEventListener("click", (e) => {
+  e.preventDefault();
+  void chrome.tabs.create({ url: viewerUrl });
+});
 void refresh();
 setInterval(() => void refresh(), 1500);

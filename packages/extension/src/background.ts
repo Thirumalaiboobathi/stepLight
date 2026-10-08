@@ -1,3 +1,4 @@
+import { LocalRunStore, type KeyValueStore } from "@steplight/core";
 import { createMessageHandler, type BackgroundDeps, type Session } from "./background-logic.js";
 import { SERVER_URL, type ExtensionMessage } from "./messages.js";
 
@@ -10,7 +11,18 @@ async function injectIntoActiveTab(): Promise<void> {
   }
 }
 
+const local = new LocalRunStore(chrome.storage.local as unknown as KeyValueStore);
+
 const deps: BackgroundDeps = {
+  local,
+  async probe() {
+    try {
+      const res = await fetch(`${SERVER_URL}/api/runs`, { signal: AbortSignal.timeout(1500) });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
   async load() {
     const stored = await chrome.storage.session.get("session");
     return stored["session"] as Session | undefined;

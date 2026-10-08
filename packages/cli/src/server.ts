@@ -6,6 +6,9 @@ import {
   RunWriter,
   isSafeId,
   listRuns,
+  newRunId,
+  parseBundle,
+  writeRun,
   readRun,
   readSnapshot,
   type Run,
@@ -105,6 +108,13 @@ export function createViewerServer(options: ServerOptions): Server {
     if (req.method === "POST" && url.pathname === "/api/ingest") {
       await ingest(JSON.parse(await readBody(req)) as IngestMessage);
       return json(res, 200, { ok: true });
+    }
+    if (req.method === "POST" && url.pathname === "/api/import") {
+      const bundle = parseBundle(await readBody(req));
+      const exists = await readRun(options.runsDir, bundle.run.id).then(() => true, () => false);
+      const run = exists ? { ...bundle.run, id: newRunId() } : bundle.run;
+      await writeRun(options.runsDir, run, bundle.snapshots);
+      return json(res, 200, { id: run.id });
     }
     if (req.method !== "GET") return json(res, 405, { error: "method not allowed" });
     if (url.pathname === "/api/runs") return json(res, 200, await listRuns(options.runsDir));

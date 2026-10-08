@@ -25,3 +25,13 @@ Choices made where the spec was ambiguous. Simplest reasonable option wins.
 21. **Playwright browsers are a one-time dev download** (`playwright install chromium`), documented in the README. It is not a runtime network call.
 22. **`causedBy` heuristic:** a click/type/submit whose target text shares a ≥4-letter word with the evidence of the most recent page read that has a medium+ hidden_instruction flag.
 23. **Test framework for the viewer e2e** uses plain Playwright + Vitest rather than `@playwright/test` to keep one runner.
+
+## Round 2
+
+24. **Standalone storage layout.** `LocalRunStore` (core, browser-safe) keeps one key per run meta, per step and per snapshot (`sl:meta:`, `sl:step:`, `sl:snap:`) so appending a step never rewrites the whole run. Budget 8 MB (≈ characters) and 60 KB per snapshot; oldest runs are evicted first and the active run is never evicted. Without the `unlimitedStorage` permission (kept out to stay minimal) `chrome.storage.local` allows 10 MB.
+25. **Mode is decided per run at Start** (server reachable → connected, else standalone). If the server disappears mid-run the extension switches to standalone and copies the steps seen so far (without earlier snapshots) into local storage.
+26. **The bundled viewer is the same React app**; it detects `chrome-extension:` and swaps its data source to `LocalRunStore`. `viewer.html` is the viewer's `index.html` copied by the extension build, so the viewer must be built first (the extension depends on it in the workspace).
+27. **Run bundle format** (`steplight-run` v1: run + snapshots) is used for JSON export/import, re-sanitised on both create and parse so a hand-edited file cannot smuggle secrets in. Import of an existing id stores under a fresh id.
+28. **Both viewers have both Import and Export JSON** (shared code); the spec only required one each.
+29. **Icons** are generated from `viewer/public/logo.svg` by `packages/extension/scripts/make-icons.mjs` (Playwright screenshot) and committed.
+30. **Data-use disclosure:** local-only processing is declared as "not collected/transmitted"; categories handled locally are listed in docs/store-listing.md.
