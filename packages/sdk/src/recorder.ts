@@ -54,6 +54,9 @@ export interface RunHandle {
   end(status?: Exclude<RunStatus, "running">): Promise<Run>;
 }
 
+/** Delay before a page is scanned a second time to catch text injected after load. */
+const RESCAN_DELAY_MS = 1000;
+
 function logError(where: string, err: unknown): void {
   process.stderr.write(`[steplight] ${where}: ${err instanceof Error ? err.message : String(err)}\n`);
 }
@@ -70,6 +73,7 @@ class Recorder implements RunHandle {
   private lastNavUrl: string | undefined;
   private readonly seenSelectors = new Set<string>();
   private readonly wrapped: string[] = [];
+  private readonly timers = new Set<ReturnType<typeof setTimeout>>();
 
   constructor(
     private readonly page: Page,
@@ -177,14 +181,36 @@ class Recorder implements RunHandle {
     try {
       scan = await this.page.evaluate(collectPageScan);
     } catch (err) {
-      logError("snapshot", err); // page navigated away mid-scan; skip
+      // The agent navigated away mid-scan: expected and harmless, so stay quiet about it.
+      if (!/context was destroyed|navigat|Target (page|closed)/i.test(String(err))) logError("snapshot", err);
       return;
     }
     this.pages.push({ url: scan.url, text: scan.text });
+    const flags = hiddenInstruction(scan.dom);
+    await this.addStep("page_read", ts, { url: scan.url, targetText: scan.title, flags }, scan.text);
+    this.scheduleRescan(scan.url, new Set(flags.map((f) => f.evidence)));
+  }
+
+  /** Scan the page again shortly after load: catches instructions injected by scripts (setTimeout). */
+  private scheduleRescan(url: string, known: Set<string>): void {
+    const timer = setTimeout(() => {
+      this.timers.delete(timer);
+      if (!this.ended) this.enqueue("rescan", () => this.rescan(url, known));
+    }, RESCAN_DELAY_MS);
+    timer.unref?.();
+    this.timers.add(timer);
+  }
+
+  private async rescan(url: string, known: Set<string>): Promise<void> {
+    if (this.page.url() !== url) return; // the agent already moved on
+    const scan = await this.page.evaluate(collectPageScan);
+    const fresh = hiddenInstruction(scan.dom).filter((f) => !known.has(f.evidence));
+    if (fresh.length === 0) return;
+    this.pages.push({ url: scan.url, text: scan.text });
     await this.addStep(
       "page_read",
-      ts,
-      { url: scan.url, targetText: scan.title, flags: hiddenInstruction(scan.dom) },
+      Date.now(),
+      { url: scan.url, targetText: `${scan.title} (content changed after load)`, flags: fresh },
       scan.text,
     );
   }
@@ -350,6 +376,8 @@ class Recorder implements RunHandle {
   async end(status: Exclude<RunStatus, "running"> = "success"): Promise<Run> {
     if (!this.ended) {
       this.ended = true;
+      for (const t of this.timers) clearTimeout(t);
+      this.timers.clear();
       this.unwrapActions();
       await this.chain;
       const endedAt = Date.now();

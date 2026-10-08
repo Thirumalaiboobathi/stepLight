@@ -38,6 +38,9 @@ importers:
       '@steplight/fixtures-site':
         specifier: workspace:*
         version: link:../fixtures-site
+      '@steplight/redteam':
+        specifier: workspace:*
+        version: link:../../packages/redteam
       '@steplight/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
@@ -52,6 +55,9 @@ importers:
       '@steplight/core':
         specifier: workspace:*
         version: link:../core
+      '@steplight/redteam':
+        specifier: workspace:*
+        version: link:../redteam
       commander:
         specifier: ^12.1.0
         version: 12.1.0
@@ -120,6 +126,19 @@ importers:
       vite:
         specifier: ^5.4.21
         version: 5.4.21(@types/node@20.19.43)(lightningcss@1.32.0)
+
+  packages/redteam:
+    dependencies:
+      '@steplight/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@steplight/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      playwright:
+        specifier: ^1.64.0
+        version: 1.64.0
 
   packages/sdk:
     dependencies:

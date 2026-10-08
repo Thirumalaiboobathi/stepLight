@@ -26,11 +26,18 @@ export function collectPageScan(): PageScan {
   const perElement = new Map<any, string>();
   const order: any[] = [];
 
-  const walker = doc.createTreeWalker(doc.body ?? doc.documentElement, 4 /* SHOW_TEXT */);
+  // Text that is not rendered but is still read by agents working on raw HTML / the a11y tree.
+  const extras: { text: string; source: "comment" | "attribute"; label: string }[] = [];
+
+  const walker = doc.createTreeWalker(doc.documentElement, 132 /* SHOW_TEXT | SHOW_COMMENT */);
   let n: any;
   while ((n = walker.nextNode())) {
     const t = String(n.nodeValue ?? "").replace(/\s+/g, " ").trim();
     if (!t) continue;
+    if (n.nodeType === 8) {
+      if (t.length >= 8) extras.push({ text: t, source: "comment", label: "comment" });
+      continue;
+    }
     const el = n.parentElement;
     if (!el || SKIP.has(el.tagName)) continue;
     const prev = perElement.get(el) as string | undefined;
@@ -82,6 +89,18 @@ export function collectPageScan(): PageScan {
       ariaHidden,
       hiddenAttr,
     });
+  }
+
+  for (const el of Array.from(doc.querySelectorAll("[aria-label],[alt]")) as any[]) {
+    for (const attr of ["aria-label", "alt"]) {
+      const v = String(el.getAttribute(attr) ?? "").replace(/\s+/g, " ").trim();
+      if (v.length >= 8) extras.push({ text: v, source: "attribute", label: attr });
+    }
+  }
+  for (const e of extras) {
+    if (nodes.length >= MAX_NODES) break;
+    lines.push(`[${e.label}] ${e.text}`);
+    nodes.push({ text: e.text, source: e.source });
   }
 
   return {

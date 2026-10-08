@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { DEFAULT_RUNS_DIR, clearRuns, exportRunOtlp, generatePlaywrightTest, readRun, DEFAULT_OTLP_ENDPOINT } from "@steplight/core/node";
 import { runCheck } from "./checkCommand.js";
+import { registerRedteam } from "./redteamCommand.js";
 import type { CheckFormat } from "./checkFormats.js";
 import { diffStored, formatDiff } from "./diffCommand.js";
 import { createViewerServer, findViewerDir } from "./server.js";
@@ -146,6 +147,8 @@ export function buildProgram(): Command {
       (exitCode === 2 ? console.error : console.log)(output);
       process.exitCode = exitCode;
     });
+
+  registerRedteam(program, process.env.STEPLIGHT_DIR ?? DEFAULT_RUNS_DIR);
 
   return program;
 }

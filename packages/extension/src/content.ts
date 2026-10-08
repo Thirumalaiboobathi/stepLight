@@ -120,14 +120,36 @@ function main(): void {
 
   try {
     const scan = collectPageScan();
+    const flags = hiddenInstruction(scan.dom);
     send({
       kind: "page_read",
       url: scan.url,
       title: scan.title,
       text: scan.text,
-      flags: hiddenInstruction(scan.dom),
+      flags,
       timestamp: Date.now(),
     });
+    // Scan again shortly after load to catch instructions injected by scripts (setTimeout).
+    const known = new Set(flags.map((f) => f.evidence));
+    setTimeout(() => {
+      try {
+        if (!active || location.href !== scan.url) return;
+        const again = collectPageScan();
+        const fresh = hiddenInstruction(again.dom).filter((f) => !known.has(f.evidence));
+        if (fresh.length > 0) {
+          send({
+            kind: "page_read",
+            url: again.url,
+            title: `${again.title} (content changed after load)`,
+            text: again.text,
+            flags: fresh,
+            timestamp: Date.now(),
+          });
+        }
+      } catch (err) {
+        console.warn("[steplight] rescan failed:", err);
+      }
+    }, 1000);
   } catch (err) {
     console.warn("[steplight] page scan failed:", err);
   }

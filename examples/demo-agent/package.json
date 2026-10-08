@@ -6,12 +6,14 @@
   "scripts": {
     "build": "echo demo-agent: nothing to build",
     "test": "vitest run",
-    "demo": "node src/demo.mjs"
+    "demo": "node src/demo.mjs",
+    "redteam-demo": "node src/redteam.mjs"
   },
   "dependencies": {
     "@steplight/core": "workspace:*",
     "@steplight/fixtures-site": "workspace:*",
     "@steplight/sdk": "workspace:*",
-    "playwright": "^1.64.0"
+    "playwright": "^1.64.0",
+    "@steplight/redteam": "workspace:*"
   }
 }

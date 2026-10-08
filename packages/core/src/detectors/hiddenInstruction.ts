@@ -16,6 +16,12 @@ export interface DomTextNode {
   backgroundColor?: string;
   ariaHidden?: boolean;
   hiddenAttr?: boolean;
+  /**
+   * Where the text came from. Default `"text"` (rendered text). `"comment"` (HTML comment) and
+   * `"attribute"` (aria-label / alt text) are never visible to a human reader but are read by
+   * agents that consume raw HTML or the accessibility tree.
+   */
+  source?: "text" | "comment" | "attribute";
 }
 
 /** Everything the hidden-instruction detector needs about a page. */
@@ -23,6 +29,9 @@ export interface DomInfo {
   url?: string;
   nodes: DomTextNode[];
 }
+
+/** Zero-width and invisible formatting characters used to obfuscate text. */
+const ZERO_WIDTH = /[\u200B-\u200F\u2060-\u2064\uFEFF]/g;
 
 const SEND_TARGET = String.raw`(?:\S+@\S+|https?:\/\/\S+|the\s+(?:url|address|email|server|following)|this\s+(?:address|email|url)|my\s+(?:server|email|address))`;
 
@@ -112,6 +121,8 @@ export function hiddenReasons(node: DomTextNode): string[] {
   if (node.fontSizePx !== undefined && node.fontSizePx <= 1) reasons.push("font-size<=1px");
   if (node.ariaHidden) reasons.push("aria-hidden");
   if (node.hiddenAttr) reasons.push("hidden-attribute");
+  if (node.source === "comment") reasons.push("html-comment");
+  if (node.source === "attribute") reasons.push("aria-label/alt-text");
   const r = node.rect;
   if (r && (r.x + r.width <= 0 || r.y + r.height <= 0 || r.x >= 10000)) {
     reasons.push("off-screen");
@@ -130,11 +141,15 @@ export function hiddenReasons(node: DomTextNode): string[] {
 export function hiddenInstruction(dom: DomInfo): Flag[] {
   const flags: Flag[] = [];
   for (const node of dom.nodes) {
-    const text = node.text.replace(/\s+/g, " ").trim();
+    // Zero-width characters split words so naive matchers miss them; strip, match, and treat
+    // their presence next to an instruction as obfuscation.
+    const stripped = node.text.replace(ZERO_WIDTH, "");
+    const text = stripped.replace(/\s+/g, " ").trim();
     if (text.length < 8) continue;
     const hit = matchInstruction(text);
     if (!hit) continue;
     const reasons = hiddenReasons(node);
+    if (stripped.length !== node.text.length) reasons.push("zero-width-characters");
     const evidence = text.length > 300 ? `${text.slice(0, 300)}…` : text;
     if (reasons.length > 0) {
       flags.push({

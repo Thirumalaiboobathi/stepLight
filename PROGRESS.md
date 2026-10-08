@@ -18,6 +18,7 @@ All 7 phases are complete and committed. Acceptance command verified from a fres
 | R2-C2 Run diff | ✅ core diffRuns, `steplight diff`, viewer Compare mode, demo |
 | R2-C3 Playwright repro scripts | ✅ `steplight replay-script`, Copy as Playwright test, executed in tests |
 | R2-C4 Agent CI checks | ✅ `steplight check` (text/junit/sarif), GitHub Action example |
+| R2-C5 Red-team pack | ✅ `@steplight/redteam`, `steplight redteam serve|report`, 13 attacks, demo agents |
 
 ## What works
 

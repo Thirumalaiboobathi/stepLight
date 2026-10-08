@@ -18,7 +18,8 @@
   "dependencies": {
     "@steplight/core": "workspace:*",
     "commander": "^12.1.0",
-    "yaml": "^2.9.1"
+    "yaml": "^2.9.1",
+    "@steplight/redteam": "workspace:*"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",
