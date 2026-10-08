@@ -54,13 +54,38 @@ describe("GitHub workflows", () => {
     }
   });
 
-  it("only the release workflow sees a secret", () => {
+  it("no workflow uses a secret: npm publishes through OIDC trusted publishing", () => {
     for (const w of workflows) {
-      const secrets = [...w.text.matchAll(/secrets\.(\w+)/g)].map((m) => m[1]);
-      if (w.file === "release.yml") expect(secrets).toEqual(["NPM_TOKEN"]);
-      else expect(secrets, w.file).toEqual([]);
+      expect([...w.text.matchAll(/secrets\.(\w+)/g)].map((m) => m[1]), w.file).toEqual([]);
+      expect(w.text, w.file).not.toMatch(/NPM_TOKEN|NODE_AUTH_TOKEN|_authToken/);
     }
   });
+
+  it("the release workflow verifies first, publishes with provenance, and `next` for pre-releases", () => {
+    const release = workflows.find((w) => w.file === "release.yml")!;
+    const jobs = release.doc.jobs as Record<string, { permissions?: Record<string, string>; environment?: string; needs?: string; steps: { run?: string }[] }>;
+    expect(Object.keys(jobs).sort()).toEqual(["publish", "verify"]);
+    // the OIDC permission exists on the publish job only
+    expect(jobs["publish"]!.permissions).toEqual({ contents: "read", "id-token": "write" });
+    expect(jobs["verify"]!.permissions?.["id-token"]).toBeUndefined();
+    expect(jobs["publish"]!.environment).toBe("npm-release");
+    expect(jobs["publish"]!.needs).toBe("verify");
+    // tag trigger only, and lint + build + tests run before anything is published
+    expect(release.text).toContain('tags: ["v*"]');
+    const verify = jobs["verify"]!.steps.map((s) => s.run ?? "").join("\n");
+    for (const cmd of ["pnpm lint", "pnpm -r build", "pnpm -r test"]) expect(verify).toContain(cmd);
+    const publish = jobs["publish"]!.steps.map((s) => s.run ?? "").join("\n");
+    expect(publish).toContain("npm publish");
+    expect(publish).toContain("--provenance");
+    expect(publish).toContain("--access public");
+    expect(publish).toContain("*-*) dist_tag=next");
+    expect(publish).toContain('--tag "$dist_tag"');
+    // the publish job never checks out or installs repository code
+    expect(jobs["publish"]!.steps.map((s) => JSON.stringify(s)).join("")).not.toMatch(/actions\/checkout|pnpm install/);
+    // the tag must match every package version
+    expect(verify).toContain("does not match");
+  });
+
 
   it("CI runs lint, build and the full test suite; audit fails on high severity", () => {
     const ci = workflows.find((w) => w.file === "ci.yml")!.text;
@@ -78,8 +103,7 @@ describe("GitHub workflows", () => {
   it("release publishes only on version tags, with provenance, after tests", () => {
     const release = workflows.find((w) => w.file === "release.yml")!;
     expect(release.doc.on).toEqual({ push: { tags: ["v*"] } });
-    expect(release.text).toContain('NPM_CONFIG_PROVENANCE: "true"');
-    expect(release.text.indexOf("pnpm -r test")).toBeLessThan(release.text.indexOf("publish --access public"));
+    expect(release.text.indexOf("pnpm -r test")).toBeLessThan(release.text.indexOf('npm publish "tarballs'));
   });
 });
 
@@ -102,6 +126,18 @@ describe("published packages", () => {
       expect(pkg.files.every((f: string) => ["dist", "viewer-dist"].includes(f))).toBe(true);
     });
   }
+  it("the four packages share one version, which the code reports, and each ships a README and LICENSE", () => {
+    const versions = new Set<string>();
+    for (const name of ["core", "sdk", "cli", "redteam"]) {
+      versions.add(JSON.parse(readFileSync(path.join(root, "packages", name, "package.json"), "utf8")).version);
+      expect(existsSync(path.join(root, "packages", name, "README.md")), `${name} README`).toBe(true);
+      expect(readFileSync(path.join(root, "packages", name, "LICENSE"), "utf8"), `${name} LICENSE`).toContain("Apache License");
+    }
+    expect([...versions]).toHaveLength(1);
+    const [version] = [...versions];
+    expect(readFileSync(path.join(root, "packages", "core", "src", "index.ts"), "utf8")).toContain(`VERSION = "${version}"`);
+    expect(readFileSync(path.join(root, "packages", "cli", "src", "index.ts"), "utf8")).toContain(`.version("${version}")`);
+  });
   it("the CLI bundles the viewer when packed", () => {
     const pkg = JSON.parse(readFileSync(path.join(root, "packages", "cli", "package.json"), "utf8"));
     expect(pkg.scripts.prepack).toContain("copy-viewer");

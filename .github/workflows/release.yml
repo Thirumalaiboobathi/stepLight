@@ -1,7 +1,16 @@
 name: Release
 
-# Publishes the npm packages with provenance when a version tag is pushed (for example v0.2.0).
-# Needs the repository secret NPM_TOKEN (an automation token limited to the @steplight scope).
+# Publishes the four npm packages when a version tag is pushed (for example v0.1.0 or v0.1.0-rc.1).
+#
+# There is no npm token anywhere: npm "trusted publishing" lets this workflow publish through its
+# GitHub OIDC identity (configured per package on npmjs.com: repository steplight-dev/steplight,
+# workflow release.yml, environment npm-release), and every package gets a signed provenance
+# statement. A tag with a pre-release part (it contains "-") is published under the `next` dist-tag,
+# so `latest` only ever moves for a final release.
+#
+# Two jobs, so the one with the OIDC permission never runs repository code:
+#   verify   lint, build, test, pack the tarballs      (contents: read)
+#   publish  npm publish of exactly those tarballs     (contents: read, id-token: write)
 on:
   push:
     tags: ["v*"]
@@ -10,14 +19,10 @@ permissions:
   contents: read
 
 jobs:
-  publish:
-    name: Publish to npm with provenance
+  verify:
+    name: Verify and pack
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    environment: npm-release # protect with required reviewers in the repository settings
-    permissions:
-      contents: read
-      id-token: write # lets npm attach a signed provenance statement to each package
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -25,16 +30,64 @@ jobs:
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
-          registry-url: https://registry.npmjs.org
+      - name: The tag must equal the version of every published package
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          for pkg in core sdk cli redteam; do
+            version=$(node -p "require('./packages/$pkg/package.json').version")
+            if [ "v$version" != "$TAG" ]; then
+              echo "::error::tag $TAG does not match @steplight/$pkg version $version"
+              exit 1
+            fi
+          done
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm --filter @steplight/extension exec playwright install --with-deps chromium
       - run: pnpm lint
       - run: pnpm -r build
       - run: pnpm -r test
+      - name: Pack the tarballs (workspace dependencies are rewritten to real versions)
+        run: |
+          mkdir -p "$RUNNER_TEMP/tarballs"
+          for pkg in core redteam sdk cli; do
+            pnpm --filter "@steplight/$pkg" pack --pack-destination "$RUNNER_TEMP/tarballs"
+          done
+          ls -l "$RUNNER_TEMP/tarballs"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: npm-tarballs
+          path: ${{ runner.temp }}/tarballs/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish to npm (OIDC, provenance)
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: npm-release # only tags matching v* may deploy here
+    permissions:
+      contents: read
+      id-token: write # lets npm exchange the GitHub OIDC token for a publish credential and sign provenance
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24 # ships npm 11, which supports trusted publishing
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: npm-tarballs
+          path: tarballs
       - name: Publish
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: "true"
-        run: pnpm --filter @steplight/core --filter @steplight/sdk --filter @steplight/redteam --filter @steplight/cli publish --access public --no-git-checks
+          TAG: ${{ github.ref_name }}
+        run: |
+          npm --version
+          dist_tag=latest
+          case "$TAG" in *-*) dist_tag=next ;; esac
+          echo "Publishing $TAG under dist-tag $dist_tag"
+          for pkg in core redteam sdk cli; do
+            npm publish "tarballs/steplight-$pkg-${TAG#v}.tgz" --provenance --access public --tag "$dist_tag"
+          done
