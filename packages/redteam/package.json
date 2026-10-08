@@ -6,12 +6,35 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
-  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run"
   },
-  "dependencies": { "@steplight/core": "workspace:*" },
-  "devDependencies": { "@steplight/sdk": "workspace:*", "playwright": "^1.64.0" }
+  "dependencies": {
+    "@steplight/core": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/steplight/steplight.git"
+  },
+  "homepage": "https://github.com/steplight/steplight#readme",
+  "bugs": {
+    "url": "https://github.com/steplight/steplight/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
 }

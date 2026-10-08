@@ -1,7 +1,7 @@
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**", ".steplight/**"] },
+  { ignores: ["**/dist/**", "**/viewer-dist/**", "**/coverage/**", "**/node_modules/**", ".steplight/**"] },
   ...tseslint.configs.recommended,
   {
     rules: {

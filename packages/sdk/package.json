@@ -27,5 +27,20 @@
   },
   "devDependencies": {
     "playwright": "^1.64.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/steplight/steplight.git"
+  },
+  "homepage": "https://github.com/steplight/steplight#readme",
+  "bugs": {
+    "url": "https://github.com/steplight/steplight/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }

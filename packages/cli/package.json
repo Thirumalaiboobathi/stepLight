@@ -9,11 +9,13 @@
   },
   "main": "./dist/index.js",
   "files": [
-    "dist"
+    "dist",
+    "viewer-dist"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepack": "node scripts/copy-viewer.mjs"
   },
   "dependencies": {
     "@steplight/core": "workspace:*",
@@ -29,5 +31,20 @@
     "@steplight/sdk": "workspace:*",
     "@steplight/viewer": "workspace:*",
     "playwright": "^1.64.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/steplight/steplight.git"
+  },
+  "homepage": "https://github.com/steplight/steplight#readme",
+  "bugs": {
+    "url": "https://github.com/steplight/steplight/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }
