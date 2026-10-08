@@ -4,12 +4,10 @@ packages:
 onlyBuiltDependencies:
   - esbuild
 
-# Dependabot hands its cooldown (4 days) to pnpm as a release-age gate. These locked packages were
-# published inside that window (the OpenTelemetry packages and vite 6.4.4 are the versions we pinned for
-# fixes; rollup ships often), and one too-young package fails the whole Dependabot npm job.
-# Temporary: remove the list once every locked version is older than 4 days (2026-10-11 or later).
+# Dependabot hands its cooldown to pnpm as a release-age gate (patch cooldown 4 days =
+# minimum-release-age=5760) and then re-resolves the WHOLE tree with it, so one too-young transitive
+# or already-locked package (playwright, vite, rollup, OpenTelemetry...) fails the entire npm job.
+# The gate is therefore not applied by pnpm. Dependabot's own cooldown (dependabot.yml) still decides
+# which versions it is allowed to propose, and `pnpm install` here never uses a release-age gate.
 minimumReleaseAgeExclude:
-  - "@opentelemetry/*"
-  - "rollup"
-  - "@rollup/*"
-  - "vite"
+  - "*"
