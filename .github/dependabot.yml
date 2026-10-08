@@ -5,6 +5,10 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    # Dependabot's pnpm calls otherwise apply a 3-day release-age gate that fails the whole job
+    # whenever any transitive dependency (e.g. rollup's platform packages) shipped in that window.
+    cooldown:
+      default-days: 0
     groups:
       dev-tooling:
         dependency-type: development

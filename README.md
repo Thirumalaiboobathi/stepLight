@@ -336,7 +336,7 @@ Steplight reads pages written by strangers and stores what an agent saw, so it i
 - **Hardened viewers and server:** snapshot text, URLs, selectors and evidence are rendered as text only (tested with XSS payloads in every field); strict CSP on the viewer, the extension pages and the HTML report; the CLI server binds to `127.0.0.1`, requires a random per-start bearer token on every API call, checks Host and Origin, validates every request body against a schema and limits size and rate; the extension accepts messages only from its own pages and content scripts.
 - **Recording is visible:** a **REC** badge on the toolbar icon and an optional pill on the page.
 - **Organisations:** Chrome Enterprise policy (capture-level cap, forced redaction patterns, site lists, retention, disable export / CLI connection / Deep capture, require encryption), `--policy` files for the CLI/SDK, and a hash-chained audit log: [docs/enterprise.md](docs/enterprise.md).
-- **Supply chain:** SHA-pinned least-privilege GitHub Actions, CodeQL, dependency review, weekly `pnpm audit`, CycloneDX SBOM, npm provenance.
+- **Supply chain:** SHA-pinned least-privilege GitHub Actions, CodeQL (results are uploaded to code scanning once the repository is public; while it is private the SARIF is kept as a build artifact), dependency review, weekly `pnpm audit`, CycloneDX SBOM, npm provenance.
 
 Details: [PRIVACY.md](PRIVACY.md) (what is stored and how to delete it), [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) (threats, controls, residual risks), [SECURITY.md](SECURITY.md) (reporting a vulnerability). Treat `.steplight/` as sensitive and keep it out of git (it is in `.gitignore`).
 
