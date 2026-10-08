@@ -13,3 +13,15 @@ Choices made where the spec was ambiguous. Simplest reasonable option wins.
 9. **Redaction regexes are length-bounded** (found a quadratic blow-up on 300 KB text with the unbounded email regex). Bodies/snapshots are truncated *before* redaction; a secret split at the cut point can leave a short fragment.
 10. **run.json holds metadata only**; steps live in `steps.jsonl` and are merged by `readRun`.
 11. **Hidden-instruction `send … to`** pattern requires an explicit target (email, URL, "the server"…) so "send us feedback to improve" is not an instruction.
+12. **Fixtures arrived in Phase 3**, not 4, because the SDK acceptance test needs them; Phase 4 added the demo agent.
+13. **OTel export is opt-in for the SDK** (`otel: true` or `OTEL_EXPORTER_OTLP_ENDPOINT` set) so `run.end()` never waits on a missing collector. `steplight export --otlp` always tries.
+14. **Percent-decoding before matching.** Form bodies are URL-encoded (`a%40b.co`); matchers and redaction decode first. This found a real leak during integration testing.
+15. **Evidence masking is kind-aware** (email → domain only, card → last 4, keys → 4-char prefix) after a test showed the generic head/tail mask exposed part of an email.
+16. **Extension builds each entry as its own IIFE** via the Vite JS API (`scripts/build.mjs`), because content scripts cannot use ES-module imports/shared chunks and the spec forbids CRXJS.
+17. **Extension permissions:** `activeTab`, `storage`, `scripting`, host `localhost:4777`; `<all_urls>` is *optional* and requested when the user presses Start. Without it only the current page is recorded.
+18. **Extension e2e uses a patched manifest copy** (adds install-time `<all_urls>`) because the optional-permission prompt needs a human. The shipped manifest is unit-tested separately. The test skips itself if port 4777 is busy.
+19. **No extension icons** (not required for MV3; Chrome shows a default).
+20. **Extension does not capture fetch/XHR or SPA route changes** (would need `webRequest`/`webNavigation` permissions); listed in the roadmap.
+21. **Playwright browsers are a one-time dev download** (`playwright install chromium`), documented in the README. It is not a runtime network call.
+22. **`causedBy` heuristic:** a click/type/submit whose target text shares a ≥4-letter word with the evidence of the most recent page read that has a medium+ hidden_instruction flag.
+23. **Test framework for the viewer e2e** uses plain Playwright + Vitest rather than `@playwright/test` to keep one runner.
