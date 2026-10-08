@@ -4,12 +4,13 @@
   "description": "Steplight CLI: view and export recorded agent runs.",
   "license": "Apache-2.0",
   "type": "module",
-  "bin": { "steplight": "./dist/index.js" },
+  "bin": { "steplight": "./dist/bin.js" },
   "main": "./dist/index.js",
   "files": ["dist"],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run"
   },
-  "dependencies": { "@steplight/core": "workspace:*", "commander": "^12.1.0" }
+  "dependencies": { "@steplight/core": "workspace:*", "commander": "^12.1.0" },
+  "devDependencies": { "@steplight/viewer": "workspace:*", "@steplight/demo-agent": "workspace:*", "playwright": "^1.64.0" }
 }

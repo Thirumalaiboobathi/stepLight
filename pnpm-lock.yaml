@@ -55,6 +55,16 @@ importers:
       commander:
         specifier: ^12.1.0
         version: 12.1.0
+    devDependencies:
+      '@steplight/demo-agent':
+        specifier: workspace:*
+        version: link:../../examples/demo-agent
+      '@steplight/viewer':
+        specifier: workspace:*
+        version: link:../viewer
+      playwright:
+        specifier: ^1.64.0
+        version: 1.64.0
 
   packages/core:
     dependencies:

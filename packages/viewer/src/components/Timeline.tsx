@@ -1,0 +1,56 @@
+import { maxSeverity, type Run } from "@steplight/core";
+import { KIND_ICON, SEVERITY_STYLE, describeStep, offset, shortUrl } from "../format";
+import { SeverityBadge } from "./SeverityBadge";
+
+/** Vertical timeline of steps. Steps after `revealUpTo` are dimmed during replay. */
+export function Timeline(props: {
+  run: Run;
+  selectedIndex: number;
+  revealUpTo: number;
+  onSelect: (index: number) => void;
+}) {
+  return (
+    <ol className="space-y-1.5 p-3 sm:p-4">
+      {props.run.steps.map((step) => {
+        const worst = maxSeverity(step.flags);
+        const selected = step.index === props.selectedIndex;
+        const dim = step.index > props.revealUpTo;
+        return (
+          <li key={step.id}>
+            <button
+              data-testid="step-item"
+              data-kind={step.kind}
+              data-severity={worst ?? ""}
+              onClick={() => props.onSelect(step.index)}
+              className={`flex w-full items-start gap-3 rounded-lg border border-l-4 border-slate-200 px-3 py-2 text-left transition dark:border-slate-800 ${
+                worst ? SEVERITY_STYLE[worst].row : "border-l-transparent bg-white dark:bg-slate-900"
+              } ${
+                selected
+                  ? "ring-2 ring-indigo-500"
+                  : "hover:border-slate-300 dark:hover:border-slate-600"
+              } ${dim ? "opacity-35" : ""}`}
+            >
+              <span className="w-12 shrink-0 pt-0.5 font-mono text-xs text-slate-500 dark:text-slate-400">
+                {offset(step.timestamp, props.run.startedAt)}
+              </span>
+              <span aria-hidden className="shrink-0 text-lg leading-6">
+                {KIND_ICON[step.kind]}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block break-words text-sm font-medium">{describeStep(step)}</span>
+                <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
+                  #{step.index} · {step.kind}
+                  {step.url ? ` · ${shortUrl(step.url)}` : ""}
+                </span>
+              </span>
+              <SeverityBadge
+                severity={worst}
+                label={worst ? `${step.flags.length} · ${worst}` : undefined}
+              />
+            </button>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
