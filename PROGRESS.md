@@ -1,17 +1,51 @@
 # Progress
 
-## Round 3 status (in progress)
+## Round 3 status: complete
+
+Network capture plus security and privacy hardening. Verified from a fresh `git clone`: `pnpm install --frozen-lockfile && pnpm -r build && pnpm -r test && pnpm demo` (after the one-time `pnpm exec playwright install chromium`); `pnpm audit --audit-level=high` reports nothing; ESLint is clean.
 
 | Part | Status |
 |---|---|
-| A. Existing attack surfaces | ✅ report CSP (hashed, no network), viewer CSP header, extension-page CSP, XSS tests (viewer + report, 6 payload families), CLI session token + pairing, Host/Origin checks, 5 MB limit, rate limit, zod ingest schema, id validation, extension sender + message validation (+ 59 security tests) |
-| B. Network capture + SPA | ✅ webRequest capture (tab-scoped, header allowlist, body analysed in memory), `networkExfil` detector (URL/body secrets, copied page text, beacon after hidden instruction), opt-in MAIN-world deep capture, SPA navigation + debounced re-scan, 5 new red-team pages, SDK parity, viewer/report request metadata, real-Chromium e2e for each page + analytics control + perf test |
-| C. Privacy controls | ✅ capture levels (min/standard/full) in extension + SDK, always-on never-capture fields, site allow/deny lists + first-run suggestions + "paused" status, redaction engine rewrite (20+ kinds, encodings, custom patterns with ReDoS checks, fast-check fuzzing), redaction at the source, retention (extension 7 days; `steplight purge`), delete-all (settings page, viewer, `/api/purge`), REC badge + page pill, settings page |
-| D. Encryption at rest | ✅ extension storage AES-256-GCM (non-extractable key in IndexedDB, IV per record), CLI/SDK file encryption (key or scrypt passphrase, 0600 files), password-protected JSON + HTML exports, pre-export dialog with strip options, `steplight decrypt` |
-| E. Enterprise controls | ✅ managed_schema.json + chrome.storage.managed policy (9 keys, only ever tightens), `--policy` / steplight.config.json / STEPLIGHT_* for CLI+SDK, hash-chained audit log (extension UI + `steplight audit`), docs/enterprise.md |
-| F. Supply chain | ✅ SECURITY.md, THREAT_MODEL.md, 6 SHA-pinned least-privilege workflows (CI, audit, CodeQL, dependency review, SBOM, provenance release), Dependabot, audit fixed (vitest 4 / vite 6), unused deps removed, guarded by tests |
-| G. Honest docs | ⏳ |
+| A. Existing attack surfaces | ✅ text-only rendering proven with XSS payloads in viewer and report; CSP on viewer (header), extension pages (manifest) and report (hash-pinned, no network); CLI session token + pairing, Host/Origin checks, 5 MB / 8 MB limits, rate limit, zod ingest schema, id validation; extension sender + message validation |
+| B. Network capture + SPA | ✅ `webRequest` capture (recorded tab, header allowlist, body analysed in memory), `networkExfil` detector, opt-in MAIN-world Deep capture, SPA navigation + debounced re-scan, 5 new red-team pages (18 total), SDK parity, real-Chromium e2e for each page + analytics control + <5 ms perf test |
+| C. Privacy controls | ✅ capture levels (extension + SDK), always-on never-capture fields, site allow/deny + first-run suggestions, redaction engine rewrite (20+ kinds, encodings, custom patterns with ReDoS checks, fast-check fuzzing), redaction at the source, retention + `steplight purge`, delete-all, REC badge + page pill, settings page |
+| D. Encryption at rest | ✅ extension AES-256-GCM (non-extractable key, IV per record), CLI/SDK file encryption (key / scrypt passphrase, 0600), password-protected JSON + HTML exports, pre-export dialog with strip options, `steplight decrypt` |
+| E. Enterprise controls | ✅ `managed_schema.json` + `chrome.storage.managed` (9 keys, only tightens), `--policy` / `steplight.config.json` / `STEPLIGHT_*`, hash-chained audit log, `docs/enterprise.md` |
+| F. Supply chain | ✅ SECURITY.md, THREAT_MODEL.md, six SHA-pinned least-privilege workflows (CI, audit, CodeQL, dependency review, SBOM, provenance release), Dependabot, audit findings fixed (vitest 4, vite 6), unused deps removed; guarded by tests |
+| G. Honest docs | ✅ README "Security & Privacy" and feature table, PRIVACY.md rewritten, store listing and permission justifications updated (`webRequest`, `webNavigation`), CONTRIBUTING security notes |
 
+### Tests: 670 passing
+
+| Package | Tests |
+|---|---|
+| core | 453 (detectors, redaction incl. property tests, encryption, exports, policy, audit log, storage, perf guard) |
+| cli | 100 (server security, XSS e2e, export e2e, encryption, policy, purge, supply-chain guards, plus all earlier) |
+| extension | 75 (validation, network collector + <5 ms perf, real-Chromium e2e for every network page, privacy controls, encryption, policy UI, audit) |
+| redteam | 19 |
+| sdk | 14 |
+| viewer | 7 |
+| demo-agent | 2 |
+
+About 330 of these are security or privacy tests (negative cases included): `core/security`, `redact`, `redact.fuzz`, `privacy`, `encryption`, `exportPackage`, `enterprise`, `storage/*`, `network`, `perf`; `cli/security`, `xss.e2e`, `export.e2e`, `encryption`, `policy`, `purge`, `supplychain`; `extension/validate`, `manifest`, privacy / encryption / policy e2e; `sdk` privacy and policy tests.
+
+### Known gaps (honest)
+
+- Redaction is pattern-based: names, addresses and free text are not recognised. Detectors are heuristic and English-only; no images, canvas, PDFs, shadow DOM or iframe internals.
+- Extension encryption protects data at rest, not from malware running as the user (key and data share a profile). Windows has no POSIX file modes. Deleting files does not overwrite disk blocks.
+- Deep capture shares a JS world with the page: a hostile page can notice or disable it (it cannot inject events).
+- Network capture follows one tab; page events follow the agent across tabs. Multi-tab runs are not done.
+- `chrome.storage.managed` cannot be provisioned in tests, so the policy logic is unit-tested and the UIs are tested with a published policy; verify a real policy at `chrome://policy` (see docs/enterprise.md).
+- The audit log is tamper-evident, not tamper-proof. Policy files are ordinary files.
+- The GitHub workflows could only be checked structurally (and the SBOM generator and `pnpm pack` locally), not run on GitHub; the first CI run may need small fixes. npm packages are not yet published and the Chrome Web Store has no screenshots yet.
+- Python SDK, MCP tracing and live streaming (earlier next steps) are still open.
+
+### Next 5 tasks
+
+1. Run the new workflows on GitHub, fix whatever the first run shows, then publish `0.1.x` with provenance.
+2. Multi-tab runs and network capture across tabs; shadow DOM and iframe scanning.
+3. Real-policy end-to-end test (Chrome with a managed-policy file in CI) and a Web Store submission with screenshots.
+4. Detector corpus: measure false positives of `networkExfil` on real sites; multilingual hidden-instruction patterns.
+5. Python SDK / Browser Use integration emitting the same run format (and policy).
 
 Round 1 (MVP) and Round 2 (store readiness, polish, developer features) are complete and committed. The acceptance command was verified from a fresh `git clone`:
 `pnpm install && pnpm -r build && pnpm -r test && pnpm demo` (all green; after a one-time `pnpm exec playwright install chromium`).
