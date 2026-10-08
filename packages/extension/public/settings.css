@@ -22,3 +22,8 @@ button[disabled] { opacity: 0.5; cursor: not-allowed; }
 .locked { opacity: 0.6; }
 code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
 #saved, #deleted { font-size: 13px; opacity: 0.85; }
+
+.audit { max-height: 220px; overflow: auto; margin: 8px 0; padding-left: 28px; font: 12px/1.6 ui-monospace, Consolas, monospace; }
+#auditStatus.ok { color: #15803d; }
+#auditStatus.bad { color: var(--danger); font-weight: 600; }
+input:disabled, textarea:disabled { opacity: 0.55; cursor: not-allowed; }

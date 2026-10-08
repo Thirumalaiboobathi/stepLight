@@ -33,6 +33,24 @@ describe("manifest security", () => {
   });
 });
 
+describe("managed policy schema", () => {
+  const schema = JSON.parse(readFileSync(path.join(root, "public/managed_schema.json"), "utf8"));
+  it("is declared in the manifest and exists", () => {
+    expect(manifest.storage).toEqual({ managed_schema: "managed_schema.json" });
+  });
+  it("describes exactly the policy keys the code understands", async () => {
+    const { POLICY_KEYS } = await import("@steplight/core");
+    expect(Object.keys(schema.properties).sort()).toEqual([...POLICY_KEYS].sort());
+    expect(schema.type).toBe("object");
+    for (const [key, def] of Object.entries<{ title?: string; description?: string; type?: string }>(schema.properties)) {
+      expect(def.title, key).toBeTruthy();
+      expect(def.description, key).toBeTruthy();
+      expect(["string", "array", "integer", "boolean"]).toContain(def.type);
+    }
+    expect(schema.properties.maxCaptureLevel.enum).toEqual(["minimal", "standard", "full"]);
+  });
+});
+
 describe("manifest icons", () => {
   it("declares 16/32/48/128 px icons that exist in public/", () => {
     expect(Object.keys(manifest.icons).sort()).toEqual(["128", "16", "32", "48"]);

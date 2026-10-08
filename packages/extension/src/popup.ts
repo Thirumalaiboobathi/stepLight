@@ -31,7 +31,7 @@ function render(status: StatusReply): void {
   const paused = $("paused");
   paused.hidden = !status.paused;
   paused.textContent = status.paused ? `Recording paused on this site. ${status.paused}` : "";
-  $("level").textContent = status.captureLevel ? `Capture level: ${status.captureLevel}` : "";
+  $("level").textContent = [status.captureLevel ? `Capture level: ${status.captureLevel}` : "", status.managed ? "Managed by your organization" : ""].filter(Boolean).join(" · ");
   viewerUrl = connected ? SERVER_URL : chrome.runtime.getURL("viewer.html");
   $("error").textContent = status.error
     ? status.error

@@ -6,6 +6,8 @@ interface Props {
   bundle: RunBundle;
   /** Set when the report also contains a comparison with a second run. */
   comparing?: boolean;
+  /** Organisation policy: the file must be password-protected. */
+  requirePassword?: boolean;
   onConfirm: (options: ExportOptions) => void;
   onCancel: () => void;
 }
@@ -15,7 +17,7 @@ interface Props {
  * page snapshots, request bodies and URL query strings, and optionally protect the file with a
  * password. Everything is rendered as text.
  */
-export function ExportDialog({ kind, bundle, comparing, onConfirm, onCancel }: Props) {
+export function ExportDialog({ kind, bundle, comparing, requirePassword, onConfirm, onCancel }: Props) {
   const [stripSnapshots, setStripSnapshots] = useState(false);
   const [stripBodies, setStripBodies] = useState(false);
   const [stripQueryStrings, setStripQueryStrings] = useState(false);
@@ -25,6 +27,7 @@ export function ExportDialog({ kind, bundle, comparing, onConfirm, onCancel }: P
   const options: ExportOptions = { stripSnapshots, stripBodies, stripQueryStrings, ...(password ? { password } : {}) };
   const summary = useMemo(() => summarizeExport(bundle, options), [bundle, stripSnapshots, stripBodies, stripQueryStrings, password]);
   const mismatch = password !== again;
+  const needsPassword = requirePassword === true && !password;
   const kb = (chars: number) => (chars < 1024 ? `${chars} characters` : `${(chars / 1024).toFixed(1)} KB`);
 
   return (
@@ -67,7 +70,7 @@ export function ExportDialog({ kind, bundle, comparing, onConfirm, onCancel }: P
 
         <div className="mt-3 grid gap-2">
           <label className="grid gap-1">
-            Password (optional)
+            {requirePassword ? "Password (required by your organization)" : "Password (optional)"}
             <input
               data-testid="export-password"
               type="password"
@@ -106,7 +109,8 @@ export function ExportDialog({ kind, bundle, comparing, onConfirm, onCancel }: P
           </button>
           <button
             data-testid="export-confirm"
-            disabled={Boolean(password) && mismatch}
+            disabled={(Boolean(password) && mismatch) || needsPassword}
+            title={needsPassword ? "Your organization requires exports to be password-protected" : undefined}
             onClick={() => onConfirm(options)}
             className="rounded-lg bg-indigo-600 px-3 py-1.5 font-medium text-white disabled:opacity-40"
           >

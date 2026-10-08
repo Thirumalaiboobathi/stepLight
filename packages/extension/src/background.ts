@@ -3,9 +3,18 @@ import {
   LocalRunStore,
   chromeKeyValueStore,
   configureRedaction,
+  GENESIS,
+  applyPolicy,
   indexedDbKeyProvider,
+  nextAuditEntry,
+  normalizePolicy,
   normalizeSettings,
+  trimAuditLog,
+  type AuditAction,
+  type AuditEntry,
   type KeyValueStore,
+  type Policy,
+  type PolicyProblem,
   type Settings,
 } from "@steplight/core";
 import { createMessageHandler, type BackgroundDeps, type Session } from "./background-logic.js";
@@ -16,6 +25,12 @@ import { parseMessage, senderAllowed } from "./validate.js";
 const SCRIPT_ID = "steplight-recorder";
 const DEEP_ID = "steplight-deep";
 const SETTINGS_KEY = "sl-settings";
+/** What the content script, popup and pages read: the user's settings with the organisation policy applied. */
+const EFFECTIVE_KEY = "sl-effective";
+/** The policy and what it locks, for the UI. */
+const POLICY_KEY = "sl-policy";
+const AUDIT_KEY = "sl-audit";
+const MAX_AUDIT_ENTRIES = 1000;
 const TOKEN_KEY = "cliToken";
 
 /** Unregister our content scripts one by one: the API rejects the whole call if any id is unknown. */
@@ -44,35 +59,105 @@ async function getToken(): Promise<string | undefined> {
   return typeof token === "string" ? token : undefined;
 }
 
-/* ---------- settings (cached; refreshed when they change) ---------- */
+/* ---------- settings + organisation policy (cached; refreshed when they change) ---------- */
 
-let settingsCache: Settings | undefined;
+let userSettings: Settings | undefined;
+let policy: Policy = {};
+let effective: Settings | undefined;
+let policyCheckedAt = 0;
 
-/** Apply settings that other parts depend on: custom redaction patterns and the storage budget. */
-function applySettings(settings: Settings): void {
-  settingsCache = settings;
-  configureRedaction({ customPatterns: settings.customPatterns });
-  local.setMaxBytes(settings.maxStorageMB * 1024 * 1024);
+/** Read the Chrome Enterprise policy (empty when none is configured). */
+async function loadPolicy(): Promise<Policy> {
+  try {
+    const problems: PolicyProblem[] = [];
+    const next = normalizePolicy(await chrome.storage.managed.get(null), problems);
+    if (problems.length > 0) console.warn("[steplight] ignored invalid policy values:", problems);
+    return next;
+  } catch {
+    return {}; // no managed storage available: no policy
+  }
+}
+
+/** Recompute the effective settings, apply what depends on them, and publish them for other contexts. */
+async function recompute(): Promise<void> {
+  const result = applyPolicy(userSettings ?? normalizeSettings(undefined), policy);
+  effective = result.settings;
+  configureRedaction({ customPatterns: effective.customPatterns });
+  local.setMaxBytes(effective.maxStorageMB * 1024 * 1024);
+  await chrome.storage.local.set({
+    [EFFECTIVE_KEY]: effective,
+    [POLICY_KEY]: {
+      managed: result.managed,
+      policy: result.policy,
+      lockedKeys: result.lockedKeys,
+      forcedDenylist: result.forcedDenylist,
+      forcedPatterns: result.forcedPatterns,
+    },
+  });
+}
+
+async function refreshPolicy(force = false): Promise<void> {
+  if (!force && Date.now() - policyCheckedAt < 1500) return;
+  policyCheckedAt = Date.now();
+  const next = await loadPolicy();
+  if (JSON.stringify(next) !== JSON.stringify(policy)) {
+    policy = next;
+    if (userSettings) {
+      await recompute();
+      if (Object.keys(next).length > 0) await audit("policy_applied", { keys: Object.keys(next).join(",") });
+    }
+  }
 }
 
 async function getSettings(): Promise<Settings> {
-  if (!settingsCache) {
+  if (!userSettings) {
     const stored = await chrome.storage.local.get(SETTINGS_KEY);
-    applySettings(normalizeSettings(stored[SETTINGS_KEY]));
+    userSettings = normalizeSettings(stored[SETTINGS_KEY]);
+    policy = await loadPolicy();
+    policyCheckedAt = Date.now();
+    await recompute();
+    if (Object.keys(policy).length > 0) await audit("policy_applied", { keys: Object.keys(policy).join(",") });
+  } else {
+    await refreshPolicy();
   }
-  return settingsCache!;
+  return effective!;
 }
+
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes[SETTINGS_KEY]) {
-    applySettings(normalizeSettings(changes[SETTINGS_KEY].newValue));
-    void deps.runRetention?.(cachedSession?.runId);
+    const before = userSettings;
+    userSettings = normalizeSettings(changes[SETTINGS_KEY].newValue);
+    const changed = before ? (Object.keys(userSettings) as (keyof Settings)[]).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(userSettings![k])) : [];
+    void recompute().then(async () => {
+      if (changed.length > 0) await audit("settings_changed", { keys: changed.join(","), captureLevel: effective!.captureLevel });
+      await deps.runRetention?.(cachedSession?.runId);
+    });
   }
+  if (area === "managed") void refreshPolicy(true);
 });
 
-/** Retention: delete runs older than the configured number of days (0 = keep). */
-async function runRetention(activeRunId?: string): Promise<void> {
+/** Retention: delete runs older than the configured number of days (0 = keep). Returns how many were removed. */
+async function runRetention(activeRunId?: string): Promise<number> {
   const { retentionDays } = await getSettings();
-  if (retentionDays > 0) await local.deleteOlderThan(Date.now() - retentionDays * 86_400_000, activeRunId);
+  if (retentionDays <= 0) return 0;
+  return (await local.deleteOlderThan(Date.now() - retentionDays * 86_400_000, activeRunId)).length;
+}
+
+/* ---------- audit log: Steplight's own actions, as a hash chain ---------- */
+
+let auditQueue: Promise<unknown> = Promise.resolve();
+
+/** Append one entry. Serialised (pages ask the worker to log), and a failure never affects recording. */
+function audit(action: AuditAction, detail: Record<string, unknown> = {}): Promise<void> {
+  const job = auditQueue.then(async () => {
+    const stored = await chrome.storage.local.get(AUDIT_KEY);
+    const log = (stored[AUDIT_KEY] ?? { entries: [], anchor: GENESIS }) as { entries: AuditEntry[]; anchor: string };
+    const entries = [...log.entries, nextAuditEntry(log.entries.at(-1), action, detail, Date.now())];
+    const trimmed = trimAuditLog(entries, MAX_AUDIT_ENTRIES);
+    await chrome.storage.local.set({ [AUDIT_KEY]: { entries: trimmed.entries, anchor: entries.length > MAX_AUDIT_ENTRIES ? trimmed.anchor : log.anchor } });
+  });
+  auditQueue = job.catch(() => undefined);
+  return job.catch((err) => console.warn("[steplight] audit log:", err));
 }
 
 /* ---------- recording indicator: toolbar badge, and a message to every page ---------- */
@@ -127,6 +212,15 @@ const deps: BackgroundDeps = {
   },
   settings: getSettings,
   runRetention,
+  audit,
+  async cliDisabled() {
+    await getSettings();
+    return policy.disableCliConnection === true;
+  },
+  async managed() {
+    await getSettings();
+    return Object.keys(policy).length > 0;
+  },
   async deleteAll() {
     await chrome.storage.session.remove([TOKEN_KEY, "session"]);
     cachedSession = undefined;
@@ -138,6 +232,7 @@ const deps: BackgroundDeps = {
     return tab ? { ...(tab.id !== undefined ? { id: tab.id } : {}), ...(tab.url ? { url: tab.url } : {}) } : undefined;
   },
   async probe() {
+    if (policy.disableCliConnection) return false;
     const token = await getToken();
     if (!token) return false; // not paired: stay standalone
     try {
@@ -235,7 +330,7 @@ const collector = new NetworkCollector(
   (event) => {
     // With Deep capture on, give the page hook a moment to report the same request first (it
     // carries the payload); the browser's own copy is then merged away instead of duplicated.
-    if (settingsCache?.deepCapture && HOOKED.has(event.resourceType)) {
+    if (effective?.deepCapture && HOOKED.has(event.resourceType)) {
       setTimeout(() => void handle({ type: "event", event }), DEEP_GRACE_MS);
     } else {
       void handle({ type: "event", event });

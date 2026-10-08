@@ -15,8 +15,8 @@ const MAX_PER_SECOND = 50;
 export function listenForDeepCapture(send: (event: PageEventMsg) => void, isActive: () => boolean): void {
   void (async () => {
     try {
-      const stored = await chrome.storage.local.get(SETTINGS_KEY);
-      if (!normalizeSettings(stored[SETTINGS_KEY]).deepCapture) return;
+      const stored = await chrome.storage.local.get(["sl-effective", SETTINGS_KEY]);
+      if (!normalizeSettings(stored["sl-effective"] ?? stored[SETTINGS_KEY]).deepCapture) return;
       const bytes = crypto.getRandomValues(new Uint8Array(16));
       const nonce = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
       const channel = new MessageChannel();

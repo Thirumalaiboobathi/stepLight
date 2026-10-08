@@ -63,7 +63,9 @@ export type ExtensionMessage =
   | { type: "pair"; link: string }
   | { type: "unpair" }
   /** Delete every stored run, the pairing token and any recording in progress. */
-  | { type: "delete_all" };
+  | { type: "delete_all" }
+  /** An extension page reports something it did that belongs in the audit log (export / import). */
+  | { type: "audit"; action: "export" | "import"; detail?: Record<string, string | number | boolean> };
 
 /** Where recorded steps go. */
 export type ConnectionMode = "standalone" | "connected";
@@ -80,6 +82,8 @@ export interface StatusReply {
   paired?: boolean;
   /** Why recording is paused on the current tab (site rules), if it is. */
   paused?: string;
+  /** True when an organisation policy is in force. */
+  managed?: boolean;
   /** Capture level in effect. */
   captureLevel?: "minimal" | "standard" | "full";
   error?: string;

@@ -1,0 +1,56 @@
+{
+  "type": "object",
+  "properties": {
+    "maxCaptureLevel": {
+      "title": "Highest capture level",
+      "description": "The most data Steplight may keep: minimal (URLs without query strings, step kinds and flags), standard (plus redacted page text and request metadata) or full (plus redacted request body previews). Users can choose a lower level but never a higher one.",
+      "type": "string",
+      "enum": ["minimal", "standard", "full"]
+    },
+    "forceRedactionPatterns": {
+      "title": "Always-applied redaction patterns",
+      "description": "Regular expressions whose matches are always replaced by [REDACTED:custom], in addition to the built-in patterns and the user's own. Patterns that could cause catastrophic backtracking are ignored.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "siteAllowlist": {
+      "title": "Only record these sites",
+      "description": "When not empty, Steplight records only these domains (example.com also covers its subdomains; *.example.com is accepted). The user's own allow list is ignored.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "siteDenylist": {
+      "title": "Never record these sites",
+      "description": "Domains that are never recorded. Added to the user's own deny list; users cannot remove these entries.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "retentionDays": {
+      "title": "Maximum retention (days)",
+      "description": "Stored runs are deleted after at most this many days. Users can choose a shorter period.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3650
+    },
+    "disableExport": {
+      "title": "Disable export and import",
+      "description": "Hides the ability to export runs and reports and to import run files.",
+      "type": "boolean"
+    },
+    "disableCliConnection": {
+      "title": "Disable the local CLI connection",
+      "description": "The extension never sends data to a local Steplight CLI server and cannot be paired with one; runs stay inside the extension.",
+      "type": "boolean"
+    },
+    "disableDeepCapture": {
+      "title": "Disable Deep capture",
+      "description": "Prevents users from turning on the page-level hooks for fetch, XMLHttpRequest, sendBeacon and WebSocket.",
+      "type": "boolean"
+    },
+    "requireEncryption": {
+      "title": "Require encryption",
+      "description": "Exports must be password-protected. (Runs stored inside the extension are always encrypted.)",
+      "type": "boolean"
+    }
+  }
+}

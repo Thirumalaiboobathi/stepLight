@@ -10,6 +10,8 @@ describe("parseMessage drops malformed messages", () => {
     expect(parseMessage({ type: "status" })).toEqual({ type: "status" });
     expect(parseMessage({ type: "start", task: "t" })).toEqual({ type: "start", task: "t" });
     expect(parseMessage({ type: "event", event: click })).toEqual({ type: "event", event: click });
+    expect(parseMessage({ type: "audit", action: "import", detail: { encrypted: false } })).toEqual({ type: "audit", action: "import", detail: { encrypted: false } });
+    expect(parseMessage({ type: "delete_all" })).toEqual({ type: "delete_all" });
   });
 
   it("rejects everything else", () => {
@@ -35,6 +37,10 @@ describe("parseMessage drops malformed messages", () => {
       { type: "event", event: { kind: "page_read", url: "u", title: "t", text: "x", flags: [{ type: "a", severity: "boom", message: "", evidence: "" }], timestamp: 1 } },
       { type: "event", event: { kind: "page_read", url: "u", title: "t", text: "x".repeat(2_000_001), flags: [], timestamp: 1 } },
       { type: "event", event: { kind: "form_submit", url: "u", selector: "f", method: "POST", action: "a", body: 5, timestamp: 1 } },
+      { type: "audit" },
+      { type: "audit", action: "delete_all" },
+      { type: "audit", action: "export", detail: { nested: { a: 1 } } },
+      { type: "audit", action: "export", detail: { s: "x".repeat(200) } },
       { type: "pair" },
       { type: "pair", link: 5 },
     ];
@@ -64,6 +70,9 @@ describe("senderAllowed", () => {
     // a content script (in a page the agent reads) cannot start/stop/pair
     expect(senderAllowed({ type: "stop" }, { id: ID, tab: { id: 1 }, url: "https://page.test/" }, ID)).toBe(false);
     expect(senderAllowed({ type: "pair", link: "x" }, { id: ID, tab: { id: 1 }, url: "https://page.test/" }, ID)).toBe(false);
+    // nor can a page-side script fake audit entries or wipe data
+    expect(senderAllowed({ type: "audit", action: "export" }, { id: ID, tab: { id: 1 }, url: "https://page.test/" }, ID)).toBe(false);
+    expect(senderAllowed({ type: "delete_all" }, { id: ID, tab: { id: 1 }, url: "https://page.test/" }, ID)).toBe(false);
     // an extension page cannot forge page events
     expect(senderAllowed(event, { id: ID, url: `chrome-extension://${ID}/popup.html` }, ID)).toBe(false);
     // the bundled viewer lives in a tab but is still an extension page

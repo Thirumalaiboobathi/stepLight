@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
-import type { Run, RunSummary } from "@steplight/core";
-import { buildBundle, copyText, deleteAllRuns, downloadText, fetchRun, fetchRuns, importRunFile } from "./api";
+import type { Policy, Run, RunSummary } from "@steplight/core";
+import { buildBundle, copyText, deleteAllRuns, downloadText, fetchPolicy, fetchRun, fetchRuns, importRunFile, reportAudit } from "./api";
 import { ComparePanel } from "./components/ComparePanel";
 import { generatePlaywrightTest, isPasswordProtected, openProtectedExport, packageHtmlExport, packageJsonExport, type ExportOptions, type RunBundle } from "@steplight/core";
 import { ExportDialog } from "./components/ExportDialog";
@@ -36,6 +36,12 @@ export default function App() {
   const [compareId, setCompareId] = useState<string | undefined>();
   const [notice, setNotice] = useState<string | undefined>();
   const [armDelete, setArmDelete] = useState(false);
+  const [policy, setPolicy] = useState<Policy>({});
+  useEffect(() => {
+    void fetchPolicy().then(setPolicy);
+  }, []);
+  const exportBlocked = policy.disableExport === true;
+  const managedTitle = "Managed by your organization: export and import are disabled";
   const [pendingExport, setPendingExport] = useState<{ kind: "json" | "html"; bundle: RunBundle; other?: RunBundle } | undefined>();
   const fileRef = useRef<HTMLInputElement>(null);
   const autoIndexFor = useRef<string | undefined>(undefined);
@@ -127,7 +133,7 @@ export default function App() {
 
   /** Build the bundle, then let the person review and trim it before anything is written. */
   const exportJson = async () => {
-    if (!run) return;
+    if (!run || exportBlocked) return;
     try {
       setPendingExport({ kind: "json", bundle: await buildBundle(run) });
     } catch (e) {
@@ -135,7 +141,7 @@ export default function App() {
     }
   };
   const exportReport = async () => {
-    if (!run) return;
+    if (!run || exportBlocked) return;
     try {
       const bundle = await buildBundle(run);
       const other = compare && compareId && compareId !== run.id ? await buildBundle(await fetchRun(compareId)) : undefined;
@@ -152,10 +158,12 @@ export default function App() {
       const locked = options.password ? ".locked" : "";
       if (pending.kind === "json") {
         downloadText(`steplight-${run.id}${locked}.json`, await packageJsonExport(pending.bundle, options));
+        void reportAudit("export", { kind: "json", encrypted: Boolean(options.password), snapshots: !options.stripSnapshots, bodies: !options.stripBodies });
         setNotice(options.password ? "Exported a password-protected run file." : "Exported the run file.");
       } else {
         const html = await packageHtmlExport(pending.bundle, options, pending.other ? { compare: pending.other } : {});
         downloadText(`steplight-report-${run.id}${locked}.html`, html, "text/html");
+        void reportAudit("export", { kind: "html", encrypted: Boolean(options.password), snapshots: !options.stripSnapshots, bodies: !options.stripBodies });
         setNotice(
           options.password
             ? "Exported a password-protected HTML report."
@@ -181,7 +189,7 @@ export default function App() {
   const onImport = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
-    if (!file) return;
+    if (!file || exportBlocked) return;
     try {
       let text = await file.text();
       let parsed: unknown;
@@ -198,6 +206,7 @@ export default function App() {
         text = opened.text;
       }
       const id = await importRunFile(text);
+      void reportAudit("import", { encrypted: isPasswordProtected(parsed) });
       loadRuns();
       select(id);
       setNotice(`Imported ${file.name}`);
@@ -247,6 +256,8 @@ export default function App() {
           <button
             data-testid="import"
             onClick={() => fileRef.current?.click()}
+            disabled={exportBlocked}
+            title={exportBlocked ? managedTitle : undefined}
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700"
           >
             Import
@@ -276,8 +287,8 @@ export default function App() {
           <button
             data-testid="export-html"
             onClick={() => void exportReport()}
-            disabled={!run}
-            title="One self-contained HTML file with the timeline, flags and details"
+            disabled={!run || exportBlocked}
+            title={exportBlocked ? managedTitle : "One self-contained HTML file with the timeline, flags and details"}
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-40 dark:border-slate-700"
           >
             Export HTML report
@@ -285,7 +296,8 @@ export default function App() {
           <button
             data-testid="export"
             onClick={() => void exportJson()}
-            disabled={!run}
+            disabled={!run || exportBlocked}
+            title={exportBlocked ? managedTitle : undefined}
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-40 dark:border-slate-700"
           >
             Export JSON
@@ -326,6 +338,7 @@ export default function App() {
           kind={pendingExport.kind}
           bundle={pendingExport.bundle}
           comparing={Boolean(pendingExport.other)}
+          requirePassword={policy.requireEncryption === true}
           onConfirm={(o) => void finishExport(o)}
           onCancel={() => setPendingExport(undefined)}
         />

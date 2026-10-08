@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createViewerServer, type ViewerServer } from "@steplight/cli";
-import type { Run, Settings, Step } from "@steplight/core";
+import { verifyAuditLog, type AuditEntry, type Run, type Settings, type Step } from "@steplight/core";
 import { startRedteamServer, type RedteamServer } from "@steplight/redteam";
 import { chromium, type BrowserContext, type Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -558,6 +558,113 @@ describe.sequential("privacy controls in a real browser", () => {
     await viewer.getByTestId("run-item").filter({ hasText: "ENCRYPTED-TASK-TITLE" }).click();
     await viewer.getByTestId("step-item").first().waitFor();
     await viewer.close();
+    await popup.close();
+  }, 90_000);
+});
+
+/* ------------------------------------------------------------------------------------------ */
+/* Enterprise controls: how the UIs react to a managed policy, and the audit log               */
+/* ------------------------------------------------------------------------------------------ */
+
+describe.sequential("managed policy UI and audit log in a real browser", () => {
+  // `chrome.storage.managed` cannot be filled from a test (it comes from the browser's enterprise
+  // policy), so the worker's policy logic is covered by unit tests (policy.ts, background-logic).
+  // Here we check what the worker publishes by default, and that every page reacts to a published policy.
+  const published = {
+    managed: true,
+    policy: { maxCaptureLevel: "minimal", disableDeepCapture: true, disableExport: true, requireEncryption: true, retentionDays: 3 },
+    lockedKeys: ["deepCapture"],
+    forcedDenylist: ["bank.example"],
+    forcedPatterns: ["CORP-\\d+"],
+  };
+
+  it("the worker publishes effective settings and an empty policy when none is configured", async (ctx) => {
+    if (!portFree) return ctx.skip();
+    const popup = await popupPage();
+    await popup.evaluate((st) => chrome.storage.local.set({ "sl-settings": st }), { captureLevel: "full" });
+    const status = await popup.evaluate(() => chrome.runtime.sendMessage({ type: "status" }));
+    expect(status).toMatchObject({ captureLevel: "full" });
+    expect(status.managed).toBeUndefined();
+    const stored = await popup.evaluate(() => chrome.storage.local.get(["sl-effective", "sl-policy"]));
+    expect(stored["sl-effective"]).toMatchObject({ captureLevel: "full", deepCapture: false, retentionDays: 7 });
+    expect(stored["sl-policy"]).toEqual({ managed: false, policy: {}, lockedKeys: [], forcedDenylist: [], forcedPatterns: [] });
+    await popup.evaluate(() => chrome.storage.local.set({ "sl-settings": {} }));
+    await popup.close();
+  }, 60_000);
+
+  it("settings page and viewer lock what a published policy controls, and say why", async (ctx) => {
+    if (!portFree) return ctx.skip();
+    const popup = await popupPage();
+    await popup.evaluate((v) => chrome.storage.local.set({ "sl-policy": v }), published);
+
+    const settingsPage = await context.newPage();
+    await settingsPage.goto(`chrome-extension://${extId}/settings.html`);
+    await settingsPage.locator("#managedNote").waitFor({ state: "visible" });
+    expect(await settingsPage.locator("#deep").isDisabled()).toBe(true);
+    expect(await settingsPage.locator('input[name="level"][value="full"]').isDisabled()).toBe(true);
+    expect(await settingsPage.locator('input[name="level"][value="standard"]').isDisabled()).toBe(true);
+    expect(await settingsPage.locator('input[name="level"][value="minimal"]').isDisabled()).toBe(false);
+    expect(await settingsPage.locator("#forcedDeny").innerText()).toContain("bank.example");
+    expect(await settingsPage.locator("#forcedPatterns").innerText()).toContain("CORP-");
+    expect(await settingsPage.locator("#days").getAttribute("max")).toBe("3");
+    await settingsPage.close();
+
+    const viewer = await context.newPage();
+    await viewer.goto(`chrome-extension://${extId}/viewer.html`);
+    await expect.poll(() => viewer.getByTestId("import").isDisabled()).toBe(true);
+    expect(await viewer.getByTestId("export").isDisabled()).toBe(true);
+    expect(await viewer.getByTestId("export-html").isDisabled()).toBe(true);
+    expect(await viewer.getByTestId("import").getAttribute("title")).toContain("Managed by your organization");
+    await viewer.close();
+
+    // policy removed: controls are free again
+    await popup.evaluate((v) => chrome.storage.local.set({ "sl-policy": v }), { managed: false, policy: {}, lockedKeys: [], forcedDenylist: [], forcedPatterns: [] });
+    const free = await context.newPage();
+    await free.goto(`chrome-extension://${extId}/settings.html`);
+    await free.locator("#deep").waitFor();
+    expect(await free.locator("#deep").isDisabled()).toBe(false);
+    expect(await free.locator("#managedNote").isHidden()).toBe(true);
+    await free.close();
+    await popup.close();
+  }, 90_000);
+
+  it("keeps a tamper-evident audit log of Steplight's own actions, without page content", async (ctx) => {
+    if (!portFree) return ctx.skip();
+    const popup = await popupPage();
+    await popup.evaluate(() => chrome.runtime.sendMessage({ type: "unpair" }));
+    const page = await context.newPage();
+    await page.goto("about:blank");
+    await page.bringToFront();
+    await popup.evaluate(() => chrome.runtime.sendMessage({ type: "start", task: "AUDIT-SECRET-TASK" }));
+    await page.goto(`http://127.0.0.1:${analyticsPort}/pay`);
+    await page.waitForTimeout(800);
+    await popup.evaluate(() => chrome.runtime.sendMessage({ type: "stop" }));
+    await popup.evaluate(() => chrome.storage.local.set({ "sl-settings": { captureLevel: "minimal" } }));
+    await popup.evaluate(() => chrome.runtime.sendMessage({ type: "audit", action: "export", detail: { kind: "json", encrypted: true } }));
+    await page.close();
+    await new Promise((r) => setTimeout(r, 500));
+
+    const log = (await popup.evaluate(() => chrome.storage.local.get("sl-audit")))["sl-audit"] as { entries: AuditEntry[]; anchor: string };
+    const actions = log.entries.map((e) => e.action);
+    for (const a of ["recording_started", "recording_stopped", "settings_changed", "export"]) expect(actions, a).toContain(a);
+    expect(JSON.stringify(log)).not.toContain("AUDIT-SECRET-TASK");
+    expect(JSON.stringify(log)).not.toContain("Checkout");
+    expect(verifyAuditLog(log.entries, log.anchor || undefined).ok).toBe(true);
+
+    // the settings page shows it and the chain is reported intact
+    const settingsPage = await context.newPage();
+    await settingsPage.goto(`chrome-extension://${extId}/settings.html`);
+    await expect.poll(() => settingsPage.locator("#auditStatus").innerText()).toContain("intact");
+    expect(await settingsPage.locator("#auditList li").count()).toBeGreaterThan(3);
+
+    // tamper with an entry in storage: the page says so
+    const tampered = structuredClone(log);
+    tampered.entries[1]!.detail = { ...tampered.entries[1]!.detail, forged: true };
+    await settingsPage.evaluate((t) => chrome.storage.local.set({ "sl-audit": t }), tampered);
+    await expect.poll(() => settingsPage.locator("#auditStatus").innerText()).toContain("tampered");
+    expect(verifyAuditLog(tampered.entries, tampered.anchor || undefined).ok).toBe(false);
+    await settingsPage.evaluate((t) => chrome.storage.local.set({ "sl-audit": t }), log);
+    await settingsPage.close();
     await popup.close();
   }, 90_000);
 });

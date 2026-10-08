@@ -1,5 +1,9 @@
 import {
+  CAPTURE_LEVELS,
   SUGGESTED_DENYLIST,
+  verifyAuditLog,
+  type AuditEntry,
+  type Policy,
   normalizeDomainList,
   normalizeSettings,
   validatePattern,
@@ -14,6 +18,81 @@ const KEY = "sl-settings";
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 const lines = (value: string): string[] => value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+
+/** What the organisation policy locks, as published by the service worker. */
+interface PolicyView {
+  managed: boolean;
+  policy: Policy;
+  lockedKeys: string[];
+  forcedDenylist: string[];
+  forcedPatterns: string[];
+}
+
+async function loadPolicyView(): Promise<PolicyView> {
+  const stored = await chrome.storage.local.get("sl-policy");
+  return (stored["sl-policy"] as PolicyView | undefined) ?? { managed: false, policy: {}, lockedKeys: [], forcedDenylist: [], forcedPatterns: [] };
+}
+
+/** Grey out what the administrator controls and say so. */
+function applyManaged(view: PolicyView): void {
+  $("managedNote").hidden = !view.managed;
+  const lock = (el: HTMLInputElement | HTMLTextAreaElement, why: string): void => {
+    el.disabled = true;
+    el.title = why;
+  };
+  const why = "Managed by your organization";
+  if (view.lockedKeys.includes("deepCapture")) lock($<HTMLInputElement>("deep"), why);
+  if (view.lockedKeys.includes("siteAllowlist")) lock($<HTMLTextAreaElement>("allow"), why);
+  const max = view.policy.maxCaptureLevel;
+  if (max) {
+    for (const radio of document.querySelectorAll<HTMLInputElement>('input[name="level"]')) {
+      if (CAPTURE_LEVELS.indexOf(radio.value as CaptureLevel) > CAPTURE_LEVELS.indexOf(max)) {
+        radio.disabled = true;
+        radio.title = `${why}: the highest level allowed is ${max}`;
+      }
+    }
+  }
+  if (view.policy.retentionDays) {
+    const days = $<HTMLInputElement>("days");
+    days.max = String(view.policy.retentionDays);
+    days.title = `${why}: at most ${view.policy.retentionDays} days`;
+  }
+  const forcedDeny = $("forcedDeny");
+  forcedDeny.hidden = view.forcedDenylist.length === 0;
+  forcedDeny.textContent = view.forcedDenylist.length ? `Also never recorded, required by your organization: ${view.forcedDenylist.join(", ")}` : "";
+  const forcedPatterns = $("forcedPatterns");
+  forcedPatterns.hidden = view.forcedPatterns.length === 0;
+  forcedPatterns.textContent = view.forcedPatterns.length ? `Always redacted, required by your organization: ${view.forcedPatterns.join("  ")}` : "";
+  if (view.policy.disableDeepCapture) $<HTMLInputElement>("deep").checked = false;
+}
+
+/** Show the audit log and whether its hash chain is intact. */
+async function renderAudit(): Promise<void> {
+  const stored = await chrome.storage.local.get("sl-audit");
+  const log = (stored["sl-audit"] as { entries: AuditEntry[]; anchor: string } | undefined) ?? { entries: [], anchor: "" };
+  const result = verifyAuditLog(log.entries, log.entries.length > 0 ? log.anchor || undefined : undefined);
+  const status = $("auditStatus");
+  status.className = result.ok ? "ok" : "bad";
+  status.textContent = result.ok
+    ? `${log.entries.length} entries. The hash chain is intact.`
+    : `The audit log has been tampered with: ${result.reason} (entry ${result.brokenAt}).`;
+  const list = $("auditList");
+  list.textContent = "";
+  for (const e of log.entries.slice(-50).reverse()) {
+    const li = document.createElement("li");
+    const detail = Object.entries(e.detail).map(([k, v]) => `${k}=${String(v)}`).join(" ");
+    li.textContent = `${new Date(e.ts).toISOString()}  ${e.action}  ${detail}`;
+    list.appendChild(li);
+  }
+  $("auditExport").onclick = () => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(log, null, 2)], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "steplight-audit-log.json";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+}
 
 async function load(): Promise<Settings> {
   const stored = await chrome.storage.local.get(KEY);
@@ -70,6 +149,12 @@ function read(previous: Settings): { settings: Settings; errors: string[]; notes
 async function main(): Promise<void> {
   let current = await load();
   fill(current);
+  const view = await loadPolicyView();
+  applyManaged(view);
+  void renderAudit();
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes["sl-audit"]) void renderAudit();
+  });
 
   $("save").addEventListener("click", () => {
     void (async () => {
@@ -88,6 +173,7 @@ async function main(): Promise<void> {
       await chrome.storage.local.set({ [KEY]: settings });
       current = settings;
       fill(settings);
+      applyManaged(view);
       $("saved").textContent = notes.length > 0 ? `Saved. ${notes.join(" ")}` : "Saved.";
     })();
   });

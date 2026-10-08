@@ -9,15 +9,20 @@ import {
   isSafeId,
   listRuns,
   newRunId,
+  appendAudit,
+  applyCaptureLevel,
+  configureRedaction,
   parseBundle,
   purgeRuns,
+  recordingBlockedReason,
   writeRun,
   readRun,
   readSnapshot,
+  type Policy,
   type Run,
   type Step,
 } from "@steplight/core/node";
-import { ingestSchema, purgeSchema } from "./ingestSchema.js";
+import { auditSchema, ingestSchema, purgeSchema } from "./ingestSchema.js";
 
 /** Options for {@link createViewerServer}. */
 export interface ServerOptions {
@@ -40,6 +45,10 @@ export interface ServerOptions {
   maxImportBytes?: number;
   /** Requests allowed per 10 s window across all clients (default 2000). */
   rateLimit?: number;
+  /** Organisation policy: caps what is stored, blocks sites, can disable ingest and export. */
+  policy?: Policy;
+  /** Audit log file for actions reported by the viewer (export / import). */
+  auditFile?: string;
 }
 
 /** The viewer server, plus the session token it requires. */
@@ -148,6 +157,8 @@ export function createViewerServer(options: ServerOptions): ViewerServer {
   const maxImport = options.maxImportBytes ?? 8 * 1024 * 1024;
   const maxRequests = options.rateLimit ?? 2000;
   const extensionIds = new Set(options.extensionIds ?? []);
+  const policy: Policy = options.policy ?? {};
+  if (policy.forceRedactionPatterns?.length) configureRedaction({ customPatterns: policy.forceRedactionPatterns });
   const rate = { windowStart: Date.now(), count: 0 };
 
   const ownHosts = (): Set<string> => {
@@ -191,7 +202,12 @@ export function createViewerServer(options: ServerOptions): ViewerServer {
     const writer = writers.get(msg.runId);
     if (!writer) throw new Error("unknown run (send run_start first)");
     if (msg.type === "step") {
-      await writer.addStep({ ...msg.step, runId: msg.runId }, msg.snapshot);
+      // Policy: sites that must not be recorded are dropped, and the stored detail is capped.
+      if (recordingBlockedReason(msg.step.url, { siteAllowlist: policy.siteAllowlist ?? [], siteDenylist: policy.siteDenylist ?? [] })) return;
+      const shaped = policy.maxCaptureLevel
+        ? applyCaptureLevel({ ...msg.step, runId: msg.runId }, msg.snapshot, policy.maxCaptureLevel)
+        : { step: { ...msg.step, runId: msg.runId }, snapshot: msg.snapshot };
+      await writer.addStep(shaped.step, shaped.snapshot);
     } else {
       await writer.finish(msg.status, msg.endedAt ?? Date.now());
       writers.delete(msg.runId);
@@ -200,7 +216,22 @@ export function createViewerServer(options: ServerOptions): ViewerServer {
 
   async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
     const parts = url.pathname.split("/").filter(Boolean); // ["api", ...]
+    if (req.method === "GET" && url.pathname === "/api/policy") return json(res, 200, policy);
+    if (req.method === "POST" && url.pathname === "/api/audit") {
+      let raw: unknown;
+      try {
+        raw = JSON.parse(await readBody(req, 4096));
+      } catch (err) {
+        if (err instanceof HttpError) throw err;
+        throw new HttpError(400, "invalid JSON");
+      }
+      const parsed = auditSchema.safeParse(raw);
+      if (!parsed.success) throw new HttpError(400, "invalid audit message");
+      if (options.auditFile) appendAudit(options.auditFile, parsed.data.action, parsed.data.detail ?? {});
+      return json(res, 200, { ok: true });
+    }
     if (req.method === "POST" && url.pathname === "/api/ingest") {
+      if (policy.disableCliConnection) throw new HttpError(403, "ingest is disabled by organisation policy");
       let raw: unknown;
       try {
         raw = JSON.parse(await readBody(req, maxBody));
@@ -231,6 +262,7 @@ export function createViewerServer(options: ServerOptions): ViewerServer {
       return json(res, 200, { deleted: deleted.length });
     }
     if (req.method === "POST" && url.pathname === "/api/import") {
+      if (policy.disableExport) throw new HttpError(403, "import and export are disabled by organisation policy");
       const bundle = parseBundle(await readBody(req, maxImport));
       const exists = await readRun(options.runsDir, bundle.run.id).then(() => true, () => false);
       const run = exists ? { ...bundle.run, id: newRunId() } : bundle.run;

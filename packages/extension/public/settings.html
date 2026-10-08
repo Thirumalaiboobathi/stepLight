@@ -51,6 +51,7 @@
         <h2>Sites</h2>
         <label for="deny">Never record these sites (one per line, e.g. <code>mybank.com</code> or <code>*.hospital.org</code>)</label>
         <textarea id="deny" rows="5" spellcheck="false"></textarea>
+        <p id="forcedDeny" class="note" hidden></p>
         <label for="allow">Only record these sites (leave empty to record any site that is not denied)</label>
         <textarea id="allow" rows="3" spellcheck="false"></textarea>
         <label for="netallow">Trusted third-party domains for network checks (analytics you use yourself; their traffic is downgraded to low)</label>
@@ -61,6 +62,7 @@
         <h2>Extra redaction patterns</h2>
         <label for="patterns">Regular expressions, one per line (e.g. <code>EMP-\d{6}</code>). Matches are replaced by [REDACTED:custom].</label>
         <textarea id="patterns" rows="3" spellcheck="false"></textarea>
+        <p id="forcedPatterns" class="note" hidden></p>
         <p class="note">Patterns that could hang the browser (nested repetition, very slow on adversarial text) are rejected.</p>
         <ul id="patternErrors" class="errors"></ul>
       </section>
@@ -93,6 +95,18 @@
         <button id="save" type="button">Save settings</button>
         <span id="saved" role="status"></span>
       </div>
+
+      <section id="auditSection">
+        <h2>Audit log</h2>
+        <p class="note">
+          Steplight's own actions on this device (recording started/stopped, exports, deletions, settings and policy
+          changes). Each entry is chained to the previous one by a hash, so tampering with the history is detectable.
+          It never contains page content or task titles.
+        </p>
+        <p id="auditStatus" role="status"></p>
+        <ol id="auditList" class="audit"></ol>
+        <button id="auditExport" type="button" class="secondary">Export audit log (JSON)</button>
+      </section>
 
       <section class="danger">
         <h2>Your data</h2>

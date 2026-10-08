@@ -2,8 +2,14 @@ import path from "node:path";
 import type { Frame, Page, Request, WebSocket } from "playwright";
 import {
   RunWriter,
+  CAPTURE_LEVELS,
   analyzeStep,
   applyCaptureLevel,
+  configureRedaction,
+  effectiveEncryption,
+  loadPolicy,
+  purgeRuns,
+  recordingBlockedReason,
   buildDiagnosis,
   collectFailureContext,
   collectPageScan,
@@ -21,6 +27,7 @@ import {
   type CaptureLevel,
   type EncryptionOptions,
   type FailureDiagnosis,
+  type Policy,
   type PageScan,
   type Run,
   type RunStatus,
@@ -107,6 +114,7 @@ class Recorder implements RunHandle {
     private readonly page: Page,
     private readonly options: RecordOptions,
     root: string,
+    private readonly policy: Policy = {},
   ) {
     this.dir = path.join(root, this.id);
     this.run = {
@@ -142,6 +150,11 @@ class Recorder implements RunHandle {
       flags: [],
       ...fields,
     };
+    // Organisation policy: sites that must not be recorded leave no trace at all.
+    const rules = { siteAllowlist: this.policy.siteAllowlist ?? [], siteDenylist: this.policy.siteDenylist ?? [] };
+    if (recordingBlockedReason(step.url, rules) || recordingBlockedReason(step.request?.url, { siteAllowlist: [], siteDenylist: rules.siteDenylist })) {
+      return step;
+    }
     step.flags.push(...analyzeStep(step, this.steps, this.pages));
     const cause = inferCausedBy(step, this.steps);
     if (cause) step.causedBy = cause;
@@ -497,7 +510,30 @@ class Recorder implements RunHandle {
  */
 export async function record(page: Page, options: RecordOptions): Promise<RunHandle> {
   const root = options.dir ?? process.env.STEPLIGHT_DIR ?? DEFAULT_RUNS_DIR;
-  const recorder = new Recorder(page, options, root);
+  // Organisation policy (policy file, steplight.config.json, STEPLIGHT_* variables). Fail open for the
+  // agent, closed for privacy: if the policy cannot be honoured, the agent runs but nothing is recorded.
+  let policy: Policy;
+  try {
+    policy = loadPolicy().policy;
+  } catch (err) {
+    logError("policy", `${err instanceof Error ? err.message : String(err)} - NOT recording`);
+    return disabledHandle(root);
+  }
+  if (policy.requireEncryption && !effectiveEncryption(options.encryption)) {
+    logError("policy", "organisation policy requires encryption but no key is configured (set STEPLIGHT_ENCRYPTION_KEY) - NOT recording");
+    return disabledHandle(root);
+  }
+  if (policy.forceRedactionPatterns?.length) configureRedaction({ customPatterns: policy.forceRedactionPatterns });
+  let captureLevel = options.captureLevel ?? "standard";
+  if (policy.maxCaptureLevel && CAPTURE_LEVELS.indexOf(captureLevel) > CAPTURE_LEVELS.indexOf(policy.maxCaptureLevel)) captureLevel = policy.maxCaptureLevel;
+  if (policy.retentionDays !== undefined) await purgeRuns(root, { olderThanDays: policy.retentionDays }).catch(() => undefined);
+  const recorder = new Recorder(page, { ...options, captureLevel }, root, policy);
   await recorder.start();
   return recorder;
+}
+
+/** A handle that records nothing (used when a policy forbids recording). The agent is not affected. */
+function disabledHandle(root: string): RunHandle {
+  const run: Run = { id: "", task: "", startedAt: Date.now(), status: "failed", steps: [], meta: {} };
+  return { id: "", dir: root, note: async () => undefined, reportError: async () => undefined, end: async () => run };
 }

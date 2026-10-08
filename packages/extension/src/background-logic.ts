@@ -1,5 +1,6 @@
 import {
   DEFAULT_SETTINGS,
+  type AuditAction,
   analyzeStep,
   applyCaptureLevel,
   inferCausedBy,
@@ -60,8 +61,14 @@ export interface BackgroundDeps {
   settings?(): Promise<Settings>;
   /** The tab to record (the active tab at start). */
   activeTab?(): Promise<{ id?: number; url?: string } | undefined>;
-  /** Delete runs past the retention period (never the run in progress). */
-  runRetention?(activeRunId?: string): Promise<void>;
+  /** Delete runs past the retention period (never the run in progress). Returns how many were deleted. */
+  runRetention?(activeRunId?: string): Promise<number | void>;
+  /** True when an organisation policy forbids talking to a local CLI server. */
+  cliDisabled?(): Promise<boolean>;
+  /** True when an organisation policy is in force. */
+  managed?(): Promise<boolean>;
+  /** Append to the local, tamper-evident audit log. Never throws. */
+  audit?(action: AuditAction, detail?: Record<string, unknown>): Promise<void>;
   /** "Delete all Steplight data": runs, pairing token and recording state. */
   deleteAll?(): Promise<void>;
   /** CLI session token store (optional; tests that do not pair can omit it). */
@@ -327,6 +334,7 @@ export async function handleMessage(
         if (tab?.url) next.tabUrl = tab.url;
         const meta = { source: "chrome-extension" };
         try {
+          if (await deps.cliDisabled?.()) throw new Error("CLI connection disabled by policy");
           await deps.post({
             type: "run_start",
             run: { id: next.runId, task: next.task, startedAt: next.startedAt, meta },
@@ -337,6 +345,7 @@ export async function handleMessage(
         }
         await deps.enableRecorder();
         await deps.save(next);
+        await deps.audit?.("recording_started", { mode: next.mode, captureLevel: (await settingsOf(deps)).captureLevel });
         return reply(next);
       }
       case "stop": {
@@ -355,6 +364,7 @@ export async function handleMessage(
         } else {
           await deps.post({ type: "run_end", runId: session.runId, status: "success", endedAt }).catch(() => undefined);
         }
+        await deps.audit?.("recording_stopped", { steps: session.steps.length, mode: session.mode });
         return { recording: false, steps: session.steps.length, mode: session.mode };
       }
       case "event": {
@@ -373,13 +383,15 @@ export async function handleMessage(
         return reply(session);
       }
       case "status": {
-        await deps.runRetention?.(session?.runId);
+        const removed = await deps.runRetention?.(session?.runId);
+        if (typeof removed === "number" && removed > 0) await deps.audit?.("retention_delete", { runs: removed });
         const settings = await settingsOf(deps);
         const tab = await deps.activeTab?.();
         const paused = recordingBlockedReason(tab?.url, settings);
         return {
           ...reply(session, session ? undefined : await mode(deps), deps.getToken ? await paired(deps) : undefined),
           captureLevel: settings.captureLevel,
+          ...(deps.managed && (await deps.managed()) ? { managed: true } : {}),
           ...(paused ? { paused } : {}),
         };
       }
@@ -388,9 +400,11 @@ export async function handleMessage(
         await deps.save(undefined);
         await deps.deleteAll?.();
         await deps.local.clear();
+        await deps.audit?.("delete_all");
         return reply(undefined, await mode(deps), false);
       }
       case "pair": {
+        if (await deps.cliDisabled?.()) return { ...reply(session), error: "The CLI connection is disabled by your organization." };
         const token = parsePairingToken(message.link);
         if (!token) return { ...reply(session), error: "That does not look like a Steplight pairing link." };
         await deps.setToken?.(token);
@@ -398,10 +412,16 @@ export async function handleMessage(
           await deps.setToken?.(undefined);
           return { ...reply(session), error: "Could not reach the CLI with that token (is `steplight view` running? is the link current?)." };
         }
+        await deps.audit?.("paired");
         return reply(session, session ? undefined : "connected", true);
+      }
+      case "audit": {
+        await deps.audit?.(message.action, message.detail);
+        return reply(session, session ? undefined : "standalone");
       }
       case "unpair":
         await deps.setToken?.(undefined);
+        await deps.audit?.("unpaired");
         return reply(session, session ? undefined : "standalone", false);
     }
   } catch (err) {
@@ -418,6 +438,7 @@ async function paired(deps: BackgroundDeps): Promise<boolean> {
 }
 
 async function mode(deps: BackgroundDeps): Promise<ConnectionMode> {
+  if (await deps.cliDisabled?.()) return "standalone";
   return (await deps.probe()) ? "connected" : "standalone";
 }
 

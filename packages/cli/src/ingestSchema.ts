@@ -105,3 +105,9 @@ export const purgeSchema = z.union([
   z.object({ all: z.literal(true) }),
   z.object({ olderThanDays: z.number().int().min(0).max(3650) }),
 ]);
+
+/** Body of `POST /api/audit`: the viewer reports an export or import (details are small and flat). */
+export const auditSchema = z.object({
+  action: z.enum(["export", "import"]),
+  detail: z.record(text(40), z.union([text(120), z.boolean(), z.number()])).optional(),
+});

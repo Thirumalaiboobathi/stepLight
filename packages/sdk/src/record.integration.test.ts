@@ -1,9 +1,9 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { readRun, readSnapshot, summarizeTokens, type Run } from "@steplight/core/node";
 import { chromium, type Browser } from "playwright";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { startFixtureSites, type FixtureSites } from "../../../examples/fixtures-site/server.mjs";
 import { record } from "./index.js";
 
@@ -196,4 +196,74 @@ describe("privacy: never-capture fields and capture levels", () => {
     expect(source).toContain(NEVER_CAPTURE_NAME_PATTERN.source);
     expect(source).toContain(NEVER_CAPTURE_AUTOCOMPLETE.source);
   });
+});
+
+describe("organisation policy (environment / config file)", () => {
+  const VARS = ["STEPLIGHT_REQUIRE_ENCRYPTION", "STEPLIGHT_MAX_CAPTURE_LEVEL", "STEPLIGHT_SITE_DENYLIST", "STEPLIGHT_ENCRYPTION_KEY", "STEPLIGHT_FORCE_REDACTION_PATTERNS"];
+  const clean = (): void => {
+    for (const v of VARS) delete process.env[v];
+  };
+  afterEach(clean);
+
+  it("requireEncryption without a key: the agent still runs, but nothing is recorded", async () => {
+    process.env["STEPLIGHT_REQUIRE_ENCRYPTION"] = "1";
+    const before = (await readdir(dir)).length;
+    const page = await browser.newPage();
+    const handle = await record(page, { task: "no key", dir });
+    await page.goto(`${site.url}/clean.html`); // the agent's work is not affected
+    expect(await page.title()).toBeTruthy();
+    const run = await handle.end("success");
+    await page.close();
+    expect(handle.id).toBe("");
+    expect(run.steps).toEqual([]);
+    expect((await readdir(dir)).length).toBe(before);
+  }, 60_000);
+
+  it("requireEncryption with a key: records, encrypted", async () => {
+    process.env["STEPLIGHT_REQUIRE_ENCRYPTION"] = "1";
+    process.env["STEPLIGHT_ENCRYPTION_KEY"] = "ab".repeat(32);
+    const page = await browser.newPage();
+    const handle = await record(page, { task: "POLICY-SECRET-TASK", dir });
+    await page.goto(`${site.url}/clean.html`);
+    await handle.end("success");
+    await page.close();
+    expect(await readFile(path.join(dir, handle.id, "run.json"), "utf8")).not.toContain("POLICY-SECRET-TASK");
+    expect((await readRun(dir, handle.id)).task).toBe("POLICY-SECRET-TASK");
+  }, 60_000);
+
+  it("maxCaptureLevel lowers what the code asked for", async () => {
+    process.env["STEPLIGHT_MAX_CAPTURE_LEVEL"] = "minimal";
+    const page = await browser.newPage();
+    const handle = await record(page, { task: "capped", dir, captureLevel: "full" });
+    await page.goto(`${site.url}/clean.html?x=1`);
+    await handle.end("success");
+    await page.close();
+    const run = await readRun(dir, handle.id);
+    expect(run.steps.length).toBeGreaterThan(0);
+    expect(run.steps.every((s) => !s.snapshotRef && !(s.url ?? "").includes("?"))).toBe(true);
+  }, 60_000);
+
+  it("a denied site leaves no step at all", async () => {
+    process.env["STEPLIGHT_SITE_DENYLIST"] = "127.0.0.1";
+    const page = await browser.newPage();
+    const handle = await record(page, { task: "denied", dir });
+    await page.goto(`${site.url}/clean.html`);
+    await handle.end("success");
+    await page.close();
+    expect((await readRun(dir, handle.id)).steps).toEqual([]);
+  }, 60_000);
+
+  it("forced redaction patterns apply to what is stored", async () => {
+    process.env["STEPLIGHT_FORCE_REDACTION_PATTERNS"] = "Premium";
+    const page = await browser.newPage();
+    const handle = await record(page, { task: "forced", dir });
+    await page.goto(`${site.url}/flights.html`);
+    await handle.end("success");
+    await page.close();
+    const run = await readRun(dir, handle.id);
+    const read = run.steps.find((s) => s.kind === "page_read")!;
+    expect(await readSnapshot(dir, handle.id, read)).not.toContain("Premium");
+    const { configureRedaction } = await import("@steplight/core");
+    configureRedaction({ customPatterns: [] });
+  }, 60_000);
 });

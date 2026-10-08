@@ -136,6 +136,12 @@ export function parseMessage(raw: unknown): ExtensionMessage | undefined {
       return { type: raw["type"] };
     case "start":
       return str(raw["task"], 500) ? { type: "start", task: raw["task"] } : undefined;
+    case "audit": {
+      if (raw["action"] !== "export" && raw["action"] !== "import") return undefined;
+      const d = raw["detail"];
+      if (d !== undefined && (!isObj(d) || Object.keys(d).length > 12 || !Object.values(d).every((v) => (typeof v === "string" && v.length <= 120) || typeof v === "boolean" || num(v)))) return undefined;
+      return { type: "audit", action: raw["action"], ...(d ? { detail: d as Record<string, string | number | boolean> } : {}) };
+    }
     case "pair": {
       if (!str(raw["link"], 500)) return undefined;
       return { type: "pair", link: raw["link"] };

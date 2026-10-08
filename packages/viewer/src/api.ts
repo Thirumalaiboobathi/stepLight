@@ -6,13 +6,14 @@ import {
   createBundle,
   parseBundle,
   type KeyValueStore,
+  type Policy,
   type Run,
   type RunBundle,
   type RunSummary,
 } from "@steplight/core";
 
 /** Minimal shape of the `chrome` global we use when running as an extension page. */
-declare const chrome: { storage: { local: KeyValueStore } };
+declare const chrome: { storage: { local: KeyValueStore }; runtime?: { sendMessage(message: unknown): Promise<unknown> } };
 
 /** True when this page is the viewer bundled inside the Chrome extension (no CLI server). */
 export const inExtension: boolean =
@@ -108,6 +109,36 @@ export async function importRunFile(text: string): Promise<string> {
   const body = (await res.json()) as { id?: string; error?: string };
   if (!res.ok || !body.id) throw new Error(body.error ?? `import failed (${res.status})`);
   return body.id;
+}
+
+/** The organisation policy in force (empty when none). Used to disable export / require encryption. */
+export async function fetchPolicy(): Promise<Policy> {
+  try {
+    if (inExtension) {
+      const stored = await chrome.storage.local.get("sl-policy");
+      return ((stored["sl-policy"] as { policy?: Policy } | undefined)?.policy ?? {}) as Policy;
+    }
+    return await getJson<Policy>("/api/policy");
+  } catch {
+    return {};
+  }
+}
+
+/** Tell the local audit log that an export or import happened (never contains page content). */
+export async function reportAudit(action: "export" | "import", detail: Record<string, string | number | boolean>): Promise<void> {
+  try {
+    if (inExtension) {
+      await chrome.runtime?.sendMessage({ type: "audit", action, detail });
+      return;
+    }
+    await fetch("/api/audit", {
+      method: "POST",
+      headers: { ...authHeaders(), "content-type": "application/json" },
+      body: JSON.stringify({ action, detail }),
+    });
+  } catch {
+    /* auditing must never break the viewer */
+  }
 }
 
 /** Delete every stored run ("Delete all Steplight data"). Returns how many runs were removed. */

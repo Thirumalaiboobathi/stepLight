@@ -30,3 +30,5 @@ export * from "./crypto.js";
 export * from "./encryptedStore.js";
 export * from "./idbKeyProvider.js";
 export * from "./exportPackage.js";
+export * from "./policy.js";
+export * from "./auditLog.js";

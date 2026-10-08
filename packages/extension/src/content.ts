@@ -88,8 +88,8 @@ function formBody(form: HTMLFormElement): string {
 /** Settings from extension storage; any problem falls back to the safe defaults. */
 async function loadSettings(): Promise<Settings> {
   try {
-    const stored = await chrome.storage.local.get("sl-settings");
-    return normalizeSettings(stored["sl-settings"]);
+    const stored = await chrome.storage.local.get(["sl-effective", "sl-settings"]);
+    return normalizeSettings(stored["sl-effective"] ?? stored["sl-settings"]);
   } catch {
     return normalizeSettings(undefined);
   }

@@ -119,6 +119,30 @@ describe("start / stop / status", () => {
     expect(await t.local.listRuns()).toEqual([]);
   });
 
+  it("with the CLI disabled by policy the run stays in the extension and pairing is refused", async () => {
+    const t = fakeDeps({ cliDisabled: async () => true });
+    const started = await handleMessage({ type: "start", task: "t" }, t.deps);
+    expect(started).toMatchObject({ recording: true, mode: "standalone" });
+    expect(t.posted).toEqual([]);
+    const pair = await handleMessage({ type: "pair", link: "a".repeat(64) }, fakeDeps({ cliDisabled: async () => true }).deps);
+    expect(pair.error).toContain("disabled by your organization");
+    expect((await handleMessage({ type: "status" }, fakeDeps({ cliDisabled: async () => true }).deps)).mode).toBe("standalone");
+  });
+
+  it("writes the audit log for start, stop, pair, unpair, delete-all and page-reported exports, without task titles", async () => {
+    const entries: [string, Record<string, unknown> | undefined][] = [];
+    const t = fakeDeps({ audit: async (a, d) => void entries.push([a, d]), setToken: async () => undefined, getToken: async () => undefined });
+    await handleMessage({ type: "start", task: "SECRET-TASK-TITLE" }, t.deps);
+    await handleMessage({ type: "audit", action: "export", detail: { kind: "json", encrypted: true } }, t.deps);
+    await handleMessage({ type: "stop" }, t.deps);
+    await handleMessage({ type: "pair", link: "a".repeat(64) }, t.deps);
+    await handleMessage({ type: "unpair" }, t.deps);
+    await handleMessage({ type: "delete_all" }, t.deps);
+    expect(entries.map(([a]) => a)).toEqual(["recording_started", "export", "recording_stopped", "paired", "unpaired", "delete_all"]);
+    expect(JSON.stringify(entries)).not.toContain("SECRET-TASK-TITLE");
+    expect(entries[1]![1]).toEqual({ kind: "json", encrypted: true });
+  });
+
   it("reports an error instead of throwing when storage fails", async () => {
     const t = fakeDeps({ load: async () => Promise.reject(new Error("storage broke")) });
     const reply = await handleMessage({ type: "status" }, t.deps);
