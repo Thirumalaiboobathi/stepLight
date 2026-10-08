@@ -1,4 +1,5 @@
 import { collectPageScan, computeTokenStats, hiddenInstruction } from "@steplight/core";
+import { listenForDeepCapture } from "./deep-receiver.js";
 import type { ExtensionMessage, PageEventMsg, StatusReply } from "./messages.js";
 
 /* Runs inside web pages. Never throws into the page; stops itself when not recording. */
@@ -118,43 +119,89 @@ function main(): void {
     true,
   );
 
-  try {
-    const scan = collectPageScan();
-    const flags = hiddenInstruction(scan.dom);
-    send({
-      kind: "page_read",
-      url: scan.url,
-      title: scan.title,
-      text: scan.text,
-      flags,
-      tokens: computeTokenStats(scan),
-      timestamp: Date.now(),
-    });
-    // Scan again shortly after load to catch instructions injected by scripts (setTimeout).
-    const known = new Set(flags.map((f) => f.evidence));
-    setTimeout(() => {
-      try {
-        if (!active || location.href !== scan.url) return;
-        const again = collectPageScan();
-        const fresh = hiddenInstruction(again.dom).filter((f) => !known.has(f.evidence));
-        if (fresh.length > 0) {
-          send({
-            kind: "page_read",
-            url: again.url,
-            title: `${again.title} (content changed after load)`,
-            text: again.text,
-            flags: fresh,
-            tokens: computeTokenStats(again),
-            timestamp: Date.now(),
-          });
-        }
-      } catch (err) {
-        console.warn("[steplight] rescan failed:", err);
+  /* ---- page reading: at load, after SPA route changes and when scripts add text later ---- */
+  const reported = new Set<string>(); // hidden-instruction evidence already reported for the current URL
+  let lastUrl = "";
+  let lastTextHash = 0;
+  let scans = 0;
+  const MAX_SCANS = 40; // per page lifetime
+  const MIN_GAP_MS = 750; // at most about one scan per second
+  let lastScanAt = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const hash = (text: string): number => {
+    let h = 5381;
+    for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0;
+    return h;
+  };
+
+  /** Read the page and report it when the URL changed or new hidden instructions appeared. */
+  const readPage = (reason: "load" | "change"): void => {
+    try {
+      if (!active || scans >= MAX_SCANS) return;
+      scans++;
+      lastScanAt = Date.now();
+      const scan = collectPageScan();
+      const textHash = hash(scan.text);
+      const urlChanged = scan.url !== lastUrl;
+      if (urlChanged) reported.clear();
+      if (!urlChanged && textHash === lastTextHash) return;
+      const flags = hiddenInstruction(scan.dom);
+      const fresh = flags.filter((f) => !reported.has(f.evidence));
+      if (!urlChanged && fresh.length === 0) {
+        lastTextHash = textHash; // text changed but nothing new to report
+        return;
       }
-    }, 1000);
+      lastUrl = scan.url;
+      lastTextHash = textHash;
+      for (const f of flags) reported.add(f.evidence);
+      send({
+        kind: "page_read",
+        url: scan.url,
+        title: reason === "load" || urlChanged ? scan.title : `${scan.title} (content changed after load)`,
+        text: scan.text,
+        flags: urlChanged ? flags : fresh,
+        tokens: computeTokenStats(scan),
+        timestamp: Date.now(),
+      });
+    } catch (err) {
+      console.warn("[steplight] page scan failed:", err);
+    }
+  };
+
+  /** Debounced, rate-limited re-read (MutationObserver and route changes). */
+  const scheduleRead = (delay = 400): void => {
+    if (timer !== undefined || !active) return;
+    const wait = Math.max(delay, MIN_GAP_MS - (Date.now() - lastScanAt));
+    timer = setTimeout(() => {
+      timer = undefined;
+      readPage("change");
+    }, wait);
+  };
+
+  readPage("load");
+  // Scripts often insert text shortly after load (and after client-side route changes).
+  setTimeout(() => readPage("change"), 1000);
+  try {
+    const observer = new MutationObserver(() => {
+      if (!active) return observer.disconnect();
+      scheduleRead();
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["style", "class", "hidden", "aria-label", "alt"] });
   } catch (err) {
-    console.warn("[steplight] page scan failed:", err);
+    console.warn("[steplight] observer failed:", err);
   }
+
+  // The service worker tells us about SPA route changes (history.pushState / #fragment).
+  chrome.runtime.onMessage.addListener((message: unknown, sender) => {
+    if (sender.id !== chrome.runtime.id || sender.tab) return; // only from our own service worker
+    if (typeof message === "object" && message !== null && (message as { type?: unknown }).type === "rescan") {
+      scans = Math.max(0, scans - 5); // a route change earns a few extra reads
+      scheduleRead(300);
+    }
+  });
+
+  listenForDeepCapture(send, () => active);
 }
 
 main();

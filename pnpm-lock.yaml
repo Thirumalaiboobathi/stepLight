@@ -114,6 +114,9 @@ importers:
       '@steplight/fixtures-site':
         specifier: workspace:*
         version: link:../../examples/fixtures-site
+      '@steplight/redteam':
+        specifier: workspace:*
+        version: link:../redteam
       '@steplight/viewer':
         specifier: workspace:*
         version: link:../viewer

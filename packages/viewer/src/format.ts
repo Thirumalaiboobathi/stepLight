@@ -1,6 +1,6 @@
 import { maxSeverity, severityRank, type Flag, type Severity } from "@steplight/core";
 
-export { KIND_ICON, describeStep, offset, shortUrl } from "@steplight/core";
+export { KIND_ICON, describeStep, offset, requestMeta, shortUrl } from "@steplight/core";
 
 /** Tailwind classes per severity: badge and row highlight. */
 export const SEVERITY_STYLE: Record<Severity, { badge: string; row: string }> = {

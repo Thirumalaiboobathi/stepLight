@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { Run, Step } from "@steplight/core";
 import { fetchSnapshot } from "../api";
 import { formatTokens } from "@steplight/core";
-import { KIND_ICON, SEVERITY_STYLE, clock, describeStep } from "../format";
+import { KIND_ICON, SEVERITY_STYLE, clock, describeStep, requestMeta } from "../format";
 import { SeverityBadge } from "./SeverityBadge";
 
 /** Split text around every occurrence of the evidence strings, wrapping hits in <mark>. */
@@ -207,6 +207,7 @@ export function StepDetail(props: { run: Run; step: Step; onJump: (index: number
           <p className="break-all font-mono text-xs">
             <strong>{step.request.method}</strong> {step.request.url}
           </p>
+          {requestMeta(step) && <p className="mt-1 text-xs text-slate-500" data-testid="request-meta">{requestMeta(step)}</p>}
           {step.request.bodyPreview && (
             <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-slate-100 p-3 font-mono text-xs dark:bg-slate-800">
               {step.request.bodyPreview}

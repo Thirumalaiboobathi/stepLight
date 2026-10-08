@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { Frame, Page, Request } from "playwright";
+import type { Frame, Page, Request, WebSocket } from "playwright";
 import {
   RunWriter,
   analyzeStep,
@@ -13,6 +13,7 @@ import {
   isCrossSite,
   newRunId,
   newStepId,
+  siteOf,
   truncate,
   MAX_BODY_PREVIEW,
   DEFAULT_RUNS_DIR,
@@ -24,6 +25,17 @@ import {
   type StepKind,
 } from "@steplight/core/node";
 import { BINDING_NAME, installPageListeners, scanOnLoadScript, type PageEvent, type ScanEvent } from "./inject.js";
+
+/** Same origin and path (ignoring query and hash), i.e. possibly the same document after a route change. */
+function samePage(a: string, b: string): boolean {
+  try {
+    const x = new URL(a);
+    const y = new URL(b);
+    return x.origin === y.origin && x.pathname === y.pathname;
+  } catch {
+    return a === b;
+  }
+}
 
 /** Options for {@link record}. */
 export interface RecordOptions {
@@ -154,6 +166,7 @@ class Recorder implements RunHandle {
       });
     });
     page.on("request", (req: Request) => this.onRequest(req));
+    page.on("websocket", (ws: WebSocket) => this.onWebSocket(ws));
     page.on("download", (dl) => {
       const ts = Date.now();
       this.enqueue("download", async () => {
@@ -216,7 +229,9 @@ class Recorder implements RunHandle {
   }
 
   private async rescan(url: string, known: Set<string>): Promise<void> {
-    if (this.page.url() !== url) return; // the agent already moved on
+    // The agent already moved on to another page: its own load scan covers that one. A client-side
+    // route change (same path, new query/hash via history.pushState) is still the same document.
+    if (!samePage(this.page.url(), url)) return;
     const scan = await this.page.evaluate(collectPageScan);
     const fresh = hiddenInstruction(scan.dom).filter((f) => !known.has(f.evidence));
     if (fresh.length === 0) return;
@@ -229,26 +244,71 @@ class Recorder implements RunHandle {
     );
   }
 
+  /** Record background requests: fetch, XHR, beacons and third-party images (pixels). */
   private onRequest(req: Request): void {
     try {
       const type = req.resourceType();
-      if (type !== "fetch" && type !== "xhr") return; // navigations/forms are recorded as navigate/form_submit
-      const ts = Date.now();
       const method = req.method();
-      const body = req.postData();
+      const url = req.url();
       const from = this.page.url();
+      // Playwright's names -> the browser's (so the same detectors work for the SDK and the extension).
+      let resourceType: string | undefined;
+      if (type === "fetch" || type === "xhr") resourceType = "xmlhttprequest";
+      else if (type === "image" && siteOf(url) !== siteOf(from)) resourceType = "image"; // tracking pixels
+      else if ((type as string) === "ping") resourceType = "ping"; // navigator.sendBeacon
+      if (!resourceType) return; // navigations/forms are recorded as navigate/form_submit
+      const ts = Date.now();
+      const body = req.postData();
       this.enqueue("request", async () => {
         await this.addStep("network_request", ts, {
           url: from,
           request: {
             method,
-            url: req.url(),
-            ...(body ? { bodyPreview: truncate(body, MAX_BODY_PREVIEW) } : {}),
+            url,
+            resourceType,
+            ...(body ? { bodyPreview: truncate(body, MAX_BODY_PREVIEW), bodyBytes: body.length } : {}),
           },
         });
       });
     } catch (err) {
       logError("request", err);
+    }
+  }
+
+  /** Record WebSocket connections and the messages the page sends over them. */
+  private onWebSocket(ws: WebSocket): void {
+    try {
+      const url = ws.url();
+      const from = this.page.url();
+      const ts = Date.now();
+      this.enqueue("websocket", async () => {
+        await this.addStep("network_request", ts, {
+          url: from,
+          request: { method: "GET", url, resourceType: "websocket" },
+        });
+      });
+      ws.on("framesent", (frame) => {
+        try {
+          const payload = typeof frame.payload === "string" ? frame.payload : frame.payload.toString("utf8");
+          const at = Date.now();
+          this.enqueue("websocket", async () => {
+            await this.addStep("network_request", at, {
+              url: from,
+              request: {
+                method: "SEND",
+                url,
+                resourceType: "websocket",
+                bodyPreview: truncate(payload, MAX_BODY_PREVIEW),
+                bodyBytes: payload.length,
+              },
+            });
+          });
+        } catch (err) {
+          logError("websocket", err);
+        }
+      });
+    } catch (err) {
+      logError("websocket", err);
     }
   }
 

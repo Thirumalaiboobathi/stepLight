@@ -56,3 +56,22 @@ export function describeStep(step: Step): string {
   }
 }
 
+
+/**
+ * One-line summary of a request's metadata, e.g. `xmlhttprequest · 200 · 42 ms · 1.2 KB sent · page hook`.
+ * Empty when there is nothing beyond method and URL.
+ * @example requestMeta(step) // "ping · 204 · 3 ms"
+ */
+export function requestMeta(step: Pick<Step, "request" | "durationMs">): string {
+  const r = step.request;
+  if (!r) return "";
+  const parts: string[] = [];
+  if (r.resourceType) parts.push(r.resourceType);
+  if (r.status !== undefined) parts.push(String(r.status));
+  if (r.error) parts.push(`failed: ${r.error}`);
+  if (step.durationMs !== undefined) parts.push(`${step.durationMs} ms`);
+  if (r.bodyBytes) parts.push(`${r.bodyBytes < 1024 ? `${r.bodyBytes} B` : `${(r.bodyBytes / 1024).toFixed(1)} KB`} sent`);
+  if (r.contentType) parts.push(r.contentType);
+  if (r.source === "deep") parts.push("seen by page hook (deep capture)");
+  return parts.join(" · ");
+}

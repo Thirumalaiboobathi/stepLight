@@ -47,6 +47,20 @@ export interface StepRequest {
   method: string;
   url: string;
   bodyPreview?: string;
+  /** Browser resource type: xmlhttprequest, ping (beacon), websocket, image, sub_frame, … */
+  resourceType?: string;
+  /** HTTP status of the response, when the request completed. */
+  status?: number;
+  /** Size of the request body in bytes (the body itself is only kept at the "full" capture level). */
+  bodyBytes?: number;
+  /** Response `content-type` (one of only two response headers ever kept). */
+  contentType?: string;
+  /** Response `content-length`. */
+  contentLength?: number;
+  /** Network error reported by the browser, e.g. `net::ERR_BLOCKED_BY_CLIENT`. */
+  error?: string;
+  /** Where the observation came from: the browser's request log or the opt-in page hooks. */
+  source?: "webRequest" | "deep";
 }
 
 /** One element a failed selector matched (or nearly matched). */

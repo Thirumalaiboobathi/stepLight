@@ -53,7 +53,18 @@ const step = z.object({
   targetSelector: text(1_000).optional(),
   targetText: text(2_000).optional(),
   request: z
-    .object({ method: text(16), url: text(4_000), bodyPreview: text(20_000).optional() })
+    .object({
+      method: text(16),
+      url: text(4_000),
+      bodyPreview: text(20_000).optional(),
+      resourceType: text(32).optional(),
+      status: z.number().int().min(0).max(999).optional(),
+      bodyBytes: z.number().nonnegative().max(1e12).optional(),
+      contentType: text(100).optional(),
+      contentLength: z.number().nonnegative().max(1e12).optional(),
+      error: text(200).optional(),
+      source: z.enum(["webRequest", "deep"]).optional(),
+    })
     .optional(),
   flags: z.array(flag).max(100),
   causedBy: id.optional(),

@@ -54,6 +54,44 @@ export function parsePageEvent(raw: unknown): PageEventMsg | undefined {
     case "type":
       if (!str(raw["selector"], 1_000) || !str(raw["text"], 2_000)) return undefined;
       return { kind: raw["kind"], ...base, selector: raw["selector"], text: raw["text"] };
+    case "network": {
+      const optNum = (k: string): boolean => raw[k] === undefined || num(raw[k]);
+      const optStr = (k: string, max: number): boolean => raw[k] === undefined || str(raw[k], max);
+      if (
+        !str(raw["method"], 16) ||
+        !str(raw["resourceType"], 32) ||
+        !(raw["source"] === "webRequest" || raw["source"] === "deep") ||
+        !optStr("pageUrl", 4_000) ||
+        !optStr("bodyText", 100_000) ||
+        !optStr("contentType", 100) ||
+        !optStr("error", 200) ||
+        !optNum("status") ||
+        !optNum("durationMs") ||
+        !optNum("bodyBytes") ||
+        !optNum("contentLength")
+      ) {
+        return undefined;
+      }
+      const copy = <K extends string>(k: K): Record<string, unknown> => (raw[k] === undefined ? {} : { [k]: raw[k] });
+      return {
+        kind: "network",
+        ...base,
+        method: raw["method"],
+        resourceType: raw["resourceType"],
+        source: raw["source"],
+        ...copy("pageUrl"),
+        ...copy("status"),
+        ...copy("durationMs"),
+        ...copy("bodyText"),
+        ...copy("bodyBytes"),
+        ...copy("contentType"),
+        ...copy("contentLength"),
+        ...copy("error"),
+      } as PageEventMsg;
+    }
+    case "navigate":
+      if (raw["via"] !== "history" && raw["via"] !== "fragment") return undefined;
+      return { kind: "navigate", ...base, via: raw["via"] };
     case "form_submit":
       if (
         !str(raw["selector"], 1_000) ||

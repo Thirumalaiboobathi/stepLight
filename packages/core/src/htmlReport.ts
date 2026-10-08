@@ -1,5 +1,5 @@
 import { createBundle, type RunBundle } from "./bundle.js";
-import { KIND_ICON, describeStep, offset, shortUrl } from "./describe.js";
+import { KIND_ICON, describeStep, offset, requestMeta, shortUrl } from "./describe.js";
 import { sha256Base64 } from "./hash.js";
 import { diffRuns, type RunDiff } from "./diff.js";
 import { redactText } from "./redact.js";
@@ -91,7 +91,7 @@ function stepHtml(run: Run, step: Step, snapshots: Record<string, string>, budge
   parts.push(flagsHtml(step.flags));
   if (step.request) {
     parts.push(
-      `<h4>Request</h4><p class="mono"><strong>${esc(step.request.method)}</strong> ${esc(step.request.url)}</p>${step.request.bodyPreview ? `<pre class="small">${esc(step.request.bodyPreview)}</pre>` : ""}`,
+      `<h4>Request</h4><p class="mono"><strong>${esc(step.request.method)}</strong> ${esc(step.request.url)}</p>${requestMeta(step) ? `<p class="muted">${esc(requestMeta(step))}</p>` : ""}${step.request.bodyPreview ? `<pre class="small">${esc(step.request.bodyPreview)}</pre>` : ""}`,
     );
   }
   if (step.tokens) {

@@ -10,7 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dist = path.join(root, "dist");
 await rm(dist, { recursive: true, force: true });
 
-for (const name of ["background", "content", "popup"]) {
+for (const name of ["background", "content", "popup", "deep"]) {
   await build({
     root,
     configFile: false,

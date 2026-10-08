@@ -1,6 +1,7 @@
 import { crossDomainData, type HistoryPage } from "./detectors/crossDomainData.js";
 import { sensitiveOutbound } from "./detectors/sensitiveOutbound.js";
 import { stuckLoop } from "./detectors/stuckLoop.js";
+import { networkExfil, type NetworkDetectorOptions } from "./network.js";
 import { suspiciousRedirect } from "./detectors/suspiciousRedirect.js";
 import type { Flag, Step } from "./types.js";
 
@@ -13,8 +14,14 @@ export function analyzeStep(
   step: Step,
   history: readonly Step[],
   pages: readonly HistoryPage[],
+  options: NetworkDetectorOptions = {},
 ): Flag[] {
   const flags: Flag[] = [];
+  if (step.kind === "network_request") {
+    // Background requests (fetch, XHR, beacons, pixels, WebSockets) have their own detector.
+    flags.push(...networkExfil(step, history, pages, options));
+    return flags;
+  }
   if (step.request) flags.push(...sensitiveOutbound(step.request, step.url));
   flags.push(...crossDomainData(step, pages));
   flags.push(...suspiciousRedirect(step, history));

@@ -15,6 +15,35 @@ export type PageEventMsg =
   | { kind: "click"; url: string; selector: string; text: string; timestamp: number }
   | { kind: "type"; url: string; selector: string; text: string; timestamp: number }
   | {
+      /** A background request (fetch, XHR, beacon, pixel, WebSocket) seen by the browser or the opt-in page hooks. */
+      kind: "network";
+      /** Request URL. */
+      url: string;
+      /** URL of the page that made the request, when known. */
+      pageUrl?: string;
+      method: string;
+      /** webRequest resource type: xmlhttprequest, ping, websocket, image, sub_frame, … */
+      resourceType: string;
+      status?: number;
+      /** Time from request start to completion, in ms. */
+      durationMs?: number;
+      /** Request body text for analysis in the service worker; kept on disk only at the "full" capture level. */
+      bodyText?: string;
+      bodyBytes?: number;
+      contentType?: string;
+      contentLength?: number;
+      error?: string;
+      source: "webRequest" | "deep";
+      timestamp: number;
+    }
+  | {
+      /** A client-side (SPA) route change: history.pushState / replaceState or a #fragment change. */
+      kind: "navigate";
+      url: string;
+      via: "history" | "fragment";
+      timestamp: number;
+    }
+  | {
       kind: "form_submit";
       url: string;
       selector: string;

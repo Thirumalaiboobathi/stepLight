@@ -5,7 +5,7 @@
 | Part | Status |
 |---|---|
 | A. Existing attack surfaces | ✅ report CSP (hashed, no network), viewer CSP header, extension-page CSP, XSS tests (viewer + report, 6 payload families), CLI session token + pairing, Host/Origin checks, 5 MB limit, rate limit, zod ingest schema, id validation, extension sender + message validation (+ 59 security tests) |
-| B. Network capture + SPA | ⏳ |
+| B. Network capture + SPA | ✅ webRequest capture (tab-scoped, header allowlist, body analysed in memory), `networkExfil` detector (URL/body secrets, copied page text, beacon after hidden instruction), opt-in MAIN-world deep capture, SPA navigation + debounced re-scan, 5 new red-team pages, SDK parity, viewer/report request metadata, real-Chromium e2e for each page + analytics control + perf test |
 | C. Privacy controls | ⏳ |
 | D. Encryption at rest | ⏳ |
 | E. Enterprise controls | ⏳ |

@@ -20,3 +20,5 @@ export * from "./tokens.js";
 export * from "./describe.js";
 export * from "./htmlReport.js";
 export * from "./hash.js";
+export * from "./network.js";
+export * from "./settings.js";

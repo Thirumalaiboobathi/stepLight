@@ -19,8 +19,10 @@
   },
   "permissions": [
     "activeTab",
+    "scripting",
     "storage",
-    "scripting"
+    "webRequest",
+    "webNavigation"
   ],
   "host_permissions": [
     "http://localhost:4777/*"
