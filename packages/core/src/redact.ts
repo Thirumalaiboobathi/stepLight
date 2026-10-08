@@ -18,6 +18,22 @@ const API_KEY =
 const JWT = /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g;
 
 /**
+ * Decode percent-escapes so form-encoded values (`a%40b.co`) are visible to the matchers.
+ * Invalid sequences are left as-is.
+ * @example decodePercent("a%40b.co") // "a@b.co"
+ */
+export function decodePercent(text: string): string {
+  if (!text.includes("%")) return text;
+  return text.replace(/(?:%[0-9A-Fa-f]{2})+/g, (m) => {
+    try {
+      return decodeURIComponent(m);
+    } catch {
+      return m;
+    }
+  });
+}
+
+/**
  * Luhn checksum test for card-like digit strings (separators ignored).
  * @example luhnValid("4242 4242 4242 4242") // true
  */
@@ -42,7 +58,8 @@ export function luhnValid(input: string): boolean {
  * Find emails, Luhn-valid card numbers, API keys and JWTs in text.
  * @example findSensitive("mail me at a@b.co") // [{ kind: "email", ... }]
  */
-export function findSensitive(text: string): SensitiveMatch[] {
+export function findSensitive(input: string): SensitiveMatch[] {
+  const text = decodePercent(input);
   const out: SensitiveMatch[] = [];
   const collect = (re: RegExp, kind: SensitiveMatch["kind"], accept?: (v: string) => boolean) => {
     for (const m of text.matchAll(re)) {
@@ -62,7 +79,7 @@ export function findSensitive(text: string): SensitiveMatch[] {
  * @example redactText("key sk-abcdefghijklmnopqrstuv") // "key [REDACTED:api_key]"
  */
 export function redactText(text: string): string {
-  let out = text;
+  let out = decodePercent(text);
   out = out.replace(JWT, "[REDACTED:jwt]");
   out = out.replace(API_KEY, "[REDACTED:api_key]");
   out = out.replace(EMAIL, "[REDACTED:email]");

@@ -4,7 +4,7 @@
 |---|---|
 | 1 Scaffold | ✅ done |
 | 2 Core | ✅ done (67 core tests, detector coverage ~95%) |
-| 3 SDK + Playwright | ⏳ |
+| 3 SDK + Playwright | ✅ done |
 | 4 Fixtures + demo agent | ⏳ |
 | 5 Viewer + CLI | ⏳ |
 | 6 Chrome extension | ⏳ |

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SkyHop — Checkout</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 480px; margin: 2rem auto; color: #111; background: #fff; }
+      label { display: block; margin: 1rem 0 0.25rem; }
+      input[type="email"] { width: 100%; padding: 0.5rem; box-sizing: border-box; }
+      button { margin-top: 1rem; padding: 0.5rem 1rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Checkout</h1>
+    <p id="summary">Booking <span id="flight"></span> · <span id="fare"></span> fare</p>
+
+    <!-- The collector lives on a different origin (another local port) to simulate an unknown domain. -->
+    <form id="checkout" method="POST" action="__COLLECTOR_URL__/collect">
+      <label for="email">Confirmation email</label>
+      <input id="email" name="email" type="email" placeholder="you@example.com" />
+      <input type="hidden" id="f-flight" name="flight" />
+      <input type="hidden" id="f-fare" name="fare" />
+      <button type="submit" id="pay">Confirm booking</button>
+    </form>
+
+    <script>
+      const q = new URLSearchParams(location.search);
+      const flight = q.get("flight") || "";
+      const fare = q.get("fare") || "";
+      document.getElementById("flight").textContent = flight;
+      document.getElementById("fare").textContent = fare;
+      document.getElementById("f-flight").value = flight;
+      document.getElementById("f-fare").value = fare;
+    </script>
+  </body>
+</html>

@@ -8,3 +8,4 @@ export * from "./domain.js";
 export * from "./redact.js";
 export * from "./detectors/index.js";
 export * from "./analyze.js";
+export * from "./collect.js";

@@ -34,6 +34,11 @@ describe("redact", () => {
   it("leaves ordinary numbers alone", () => {
     expect(redactText("order 12345678 total 28,000")).toBe("order 12345678 total 28,000");
   });
+  it("sees through percent-encoding", () => {
+    expect(redactText("email=jane%40example.com&x=1")).toBe("email=[REDACTED:email]&x=1");
+    expect(findSensitive("e=a%40b.io")[0]?.kind).toBe("email");
+    expect(redactText("100%zz")).toBe("100%zz");
+  });
   it("finds matches", () => {
     expect(findSensitive("x@y.io")[0]?.kind).toBe("email");
   });
