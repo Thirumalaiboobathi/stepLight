@@ -14,7 +14,7 @@ updates:
       semver-minor-days: 7
       semver-patch-days: 4
     # (pnpm-workspace.yaml disables pnpm's own release-age gate; this cooldown is what applies. DECISIONS.md 137.)
-    # Majors of the build toolchain wait until after the 0.1.0 release. @types/node must keep
+    # Majors of the build toolchain, React and commander wait until after the 0.1.0 release. @types/node must keep
     # tracking the minimum supported Node (20), so its majors are never proposed.
     ignore:
       - dependency-name: typescript
@@ -30,6 +30,16 @@ updates:
       - dependency-name: vite
         update-types: ["version-update:semver-major"]
       - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "commander"
         update-types: ["version-update:semver-major"]
     groups:
       dev-tooling:

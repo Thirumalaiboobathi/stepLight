@@ -4,10 +4,8 @@ packages:
 onlyBuiltDependencies:
   - esbuild
 
-# Dependabot hands its cooldown to pnpm as a release-age gate (patch cooldown 4 days =
-# minimum-release-age=5760) and then re-resolves the WHOLE tree with it, so one too-young transitive
-# or already-locked package (playwright, vite, rollup, OpenTelemetry...) fails the entire npm job.
-# The gate is therefore not applied by pnpm. Dependabot's own cooldown (dependabot.yml) still decides
-# which versions it is allowed to propose, and `pnpm install` here never uses a release-age gate.
+# This exclusion exists only so that the release-age gate Dependabot injects into its pnpm calls
+# (derived from its cooldown) does not fail the whole job on transitive releases that are a few days
+# old. The real gate is the cooldown in .github/dependabot.yml; plain `pnpm install` has no gate.
 minimumReleaseAgeExclude:
   - "*"
