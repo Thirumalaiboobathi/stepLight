@@ -1,5 +1,11 @@
 # Progress
 
+## npm: 0.1.0-rc.2 published through GitHub OIDC trusted publishing
+
+- `@steplight/core`, `sdk`, `cli`, `redteam` @ `0.1.0-rc.2` are on npm under the `next` dist-tag (`latest` still `0.0.1`), published by the Release workflow from tag `v0.1.0-rc.2` (commit 981da07) with signed provenance (SLSA v1, repository `steplight-dev/steplight`, workflow `release.yml`). No npm token exists anywhere; the trusted publishers are validated by this publish.
+- `v0.1.0-rc.1` failed before publishing anything (npm read `tarballs/x.tgz` as a git spec; fixed with `./`). Process: [docs/releasing.md](docs/releasing.md); decisions 150-152.
+- Next: soak `rc.2`, fix what shows up, then tag `v0.1.0` (publishes as `latest`).
+
 ## GitHub Action (Marketplace): built, published to its own repository, proven on GitHub
 
 - Source: `packages/check-action` (private). Public repo: https://github.com/steplight-dev/steplight-check-action, tags `v1.0.0` and `v1` on the same commit, release v1.0.0. Contains only `action.yml`, `dist/index.js`, `dist/licenses.txt`, `README.md`, `LICENSE`, `SECURITY.md` (verified from a fresh clone).
