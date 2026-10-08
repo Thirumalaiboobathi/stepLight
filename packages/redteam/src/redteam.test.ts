@@ -213,7 +213,8 @@ describe("collector: WebSocket and passive telemetry", () => {
     await site.close();
   });
 
-  it("accepts a WebSocket handshake and records the first message as a collect hit", async () => {
+  // Node 20 has no global WebSocket client (added in Node 22); the server code itself is plain `node:http`.
+  it.skipIf(typeof WebSocket === "undefined")("accepts a WebSocket handshake and records the first message as a collect hit", async () => {
     const ws = new WebSocket(`${site.collectorUrl.replace(/^http/, "ws")}/collect/websocket-exfil`);
     await new Promise<void>((resolve, reject) => {
       ws.onopen = () => {
