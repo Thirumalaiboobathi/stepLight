@@ -1,4 +1,4 @@
-import { maxSeverity, severityRank, type Flag, type Severity, type Step } from "@steplight/core";
+import { maxSeverity, severityRank, type Flag, type Severity } from "@steplight/core";
 
 export { KIND_ICON, describeStep, offset, shortUrl } from "@steplight/core";
 
