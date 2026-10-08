@@ -5,10 +5,31 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
-    # Dependabot's pnpm calls otherwise apply a 3-day release-age gate that fails the whole job
-    # whenever any transitive dependency (e.g. rollup's platform packages) shipped in that window.
+    # Dependabot applies a default 3-day cooldown and hands it to pnpm as a release-age gate
+    # (minimum-release-age=4320). We keep a slightly longer wait than that default on purpose:
+    # patch = 3 + 1 days, minor and major = 7 days. Security updates ignore cooldown.
     cooldown:
-      default-days: 0
+      default-days: 4
+      semver-major-days: 7
+      semver-minor-days: 7
+      semver-patch-days: 4
+    # Majors of the build toolchain wait until after the 0.1.0 release. @types/node must keep
+    # tracking the minimum supported Node (20), so its majors are never proposed.
+    ignore:
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
+      - dependency-name: typescript-eslint
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@typescript-eslint/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitejs/plugin-react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: vite
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       dev-tooling:
         dependency-type: development
