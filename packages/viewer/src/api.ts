@@ -1,5 +1,8 @@
 import {
+  EncryptedKeyValueStore,
   LocalRunStore,
+  chromeKeyValueStore,
+  indexedDbKeyProvider,
   createBundle,
   parseBundle,
   type KeyValueStore,
@@ -17,7 +20,7 @@ export const inExtension: boolean =
 
 let store: LocalRunStore | undefined;
 function localStore(): LocalRunStore {
-  store ??= new LocalRunStore(chrome.storage.local);
+  store ??= new LocalRunStore(new EncryptedKeyValueStore(chromeKeyValueStore(chrome.storage.local), indexedDbKeyProvider()));
   return store;
 }
 

@@ -462,24 +462,27 @@ describe.sequential("privacy controls in a real browser", () => {
       await page.close();
     };
     const dump = (): Promise<Record<string, unknown>> => popup.evaluate(() => chrome.storage.local.get(null));
-    await recordStandalone("old run");
-    await recordStandalone("new run");
+    const metaIds = async (): Promise<string[]> => keys(await dump()).filter((k) => k.startsWith("sl:meta:")).map((k) => k.slice("sl:meta:".length));
     const keys = (all: Record<string, unknown>): string[] => Object.keys(all).filter((k) => k.startsWith("sl:"));
-    const metaKeys = keys(await dump()).filter((k) => k.startsWith("sl:meta:"));
-    expect(metaKeys).toHaveLength(2);
-    // make the first run 10 days old
-    const all = await dump();
-    const oldKey = metaKeys.find((k) => (all[k] as { task: string }).task === "old run")!;
-    const oldId = oldKey.slice("sl:meta:".length);
-    await popup.evaluate(
-      ([k, v]) => chrome.storage.local.set({ [k as string]: { ...(v as object), startedAt: Date.now() - 10 * 86_400_000 } }),
-      [oldKey, all[oldKey]],
-    );
+    await recordStandalone("old run");
+    const [oldId] = await metaIds();
+    expect(oldId).toBeDefined();
+    // Move the service worker's clock forward 10 days, then record again: the first run is now expired.
+    const [worker] = context.serviceWorkers();
+    await worker!.evaluate(() => {
+      const real = Date.now.bind(Date);
+      (globalThis as unknown as { __realNow: () => number }).__realNow = real;
+      Date.now = () => real() + 10 * 86_400_000;
+    });
+    await recordStandalone("new run");
     await popup.evaluate(() => chrome.runtime.sendMessage({ type: "status" })); // opening the popup enforces retention
-    await expect.poll(async () => keys(await dump()).some((k) => k.includes(oldId))).toBe(false);
-    const after = await dump();
-    expect(JSON.stringify(after)).toContain("new run");
-    expect(JSON.stringify(after)).not.toContain("old run");
+    await expect.poll(async () => (await metaIds()).length).toBe(1);
+    const left = await metaIds();
+    expect(left).not.toContain(oldId);
+    expect(keys(await dump()).some((k) => k.includes(oldId!))).toBe(false); // meta, steps and snapshots all gone
+    await worker!.evaluate(() => {
+      Date.now = (globalThis as unknown as { __realNow: () => number }).__realNow;
+    });
 
     // "Delete all Steplight data"
     await popup.evaluate(() => chrome.runtime.sendMessage({ type: "delete_all" }));
@@ -508,4 +511,53 @@ describe.sequential("privacy controls in a real browser", () => {
     await page.locator("#firstRun").waitFor({ state: "hidden" });
     await page.close();
   }, 60_000);
+
+  it("encrypts runs at rest: raw extension storage holds no plaintext, the key cannot be exported, the viewer still reads them", async (ctx) => {
+    if (!portFree) return ctx.skip();
+    const popup = await popupPage();
+    await popup.evaluate((st) => chrome.storage.local.set({ "sl-settings": st }), { captureLevel: "standard", retentionDays: 7 });
+    await popup.evaluate(() => chrome.runtime.sendMessage({ type: "unpair" }));
+    const page = await context.newPage();
+    await page.goto("about:blank");
+    await page.bringToFront();
+    await popup.evaluate(() => chrome.runtime.sendMessage({ type: "start", task: "ENCRYPTED-TASK-TITLE" }));
+    await page.goto(`http://127.0.0.1:${analyticsPort}/pay`);
+    await page.waitForTimeout(1500);
+    await popup.evaluate(() => chrome.runtime.sendMessage({ type: "stop" }));
+    await page.close();
+
+    const raw = JSON.stringify(await popup.evaluate(() => chrome.storage.local.get(null)));
+    for (const plain of ["ENCRYPTED-TASK-TITLE", "Checkout", "LAMPCODE", "127.0.0.1", "page_read", "hidden_instruction"]) {
+      expect(raw, plain).not.toContain(plain);
+    }
+    expect(raw).toContain('"alg":"AES-GCM"');
+    const ivs = [...raw.matchAll(/"iv":"([^"]+)"/g)].map((m) => m[1]);
+    expect(ivs.length).toBeGreaterThan(3);
+    expect(new Set(ivs).size).toBe(ivs.length); // a unique IV per record
+
+    const key = await popup.evaluate(
+      () =>
+        new Promise<{ extractable: boolean; algorithm: string; exportRejected: boolean }>((resolve, reject) => {
+          const open = indexedDB.open("steplight-keys", 1);
+          open.onerror = () => reject(open.error);
+          open.onsuccess = () => {
+            const get = open.result.transaction("keys").objectStore("keys").get("storage-v1");
+            get.onsuccess = async () => {
+              const k = get.result as CryptoKey;
+              const exportRejected = await crypto.subtle.exportKey("raw", k).then(() => false, () => true);
+              resolve({ extractable: k.extractable, algorithm: k.algorithm.name, exportRejected });
+            };
+          };
+        }),
+    );
+    expect(key).toEqual({ extractable: false, algorithm: "AES-GCM", exportRejected: true });
+
+    // The bundled viewer decrypts transparently.
+    const viewer = await context.newPage();
+    await viewer.goto(`chrome-extension://${extId}/viewer.html`);
+    await viewer.getByTestId("run-item").filter({ hasText: "ENCRYPTED-TASK-TITLE" }).click();
+    await viewer.getByTestId("step-item").first().waitFor();
+    await viewer.close();
+    await popup.close();
+  }, 90_000);
 });

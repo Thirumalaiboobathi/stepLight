@@ -274,7 +274,7 @@ describe("shareable HTML report", () => {
     await select.selectOption(value!);
     await page.getByTestId("diff-summary").waitFor();
 
-    const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-html").click()]);
+    const [download] = await Promise.all([page.waitForEvent("download"), (async () => { await page.getByTestId("export-html").click(); await page.getByTestId("export-confirm").click(); })()]);
     const file = path.join(dir, "viewer-report.html");
     await download.saveAs(file);
     expect((await stat(file)).size).toBeLessThan(2 * 1024 * 1024);

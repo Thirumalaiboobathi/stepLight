@@ -19,6 +19,7 @@ import {
   MAX_BODY_PREVIEW,
   DEFAULT_RUNS_DIR,
   type CaptureLevel,
+  type EncryptionOptions,
   type FailureDiagnosis,
   type PageScan,
   type Run,
@@ -56,6 +57,11 @@ export interface RecordOptions {
    * memory first, and secrets are redacted at every level.
    */
   captureLevel?: CaptureLevel;
+  /**
+   * Encrypt the run files (AES-256-GCM). Give a 32-byte `key` (64 hex characters or base64) or a
+   * `passphrase`; with neither, `$STEPLIGHT_ENCRYPTION_KEY` / `$STEPLIGHT_PASSPHRASE` are used if set.
+   */
+  encryption?: EncryptionOptions;
 }
 
 /** Handle for an in-progress recording. */
@@ -146,7 +152,7 @@ class Recorder implements RunHandle {
   }
 
   async start(): Promise<void> {
-    this.writer = await RunWriter.create(this.root, this.run);
+    this.writer = await RunWriter.create(this.root, this.run, this.options.encryption);
     const page = this.page;
 
     await page.exposeBinding(BINDING_NAME, (source, event: PageEvent | ScanEvent) => {

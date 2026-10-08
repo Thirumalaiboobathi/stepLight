@@ -26,3 +26,7 @@ export * from "./neverCapture.js";
 export { ibanValid, ibanCheckDigits, verhoeffValid, verhoeffAppend } from "./checksums.js";
 export * from "./customPatterns.js";
 export * from "./captureLevel.js";
+export * from "./crypto.js";
+export * from "./encryptedStore.js";
+export * from "./idbKeyProvider.js";
+export * from "./exportPackage.js";

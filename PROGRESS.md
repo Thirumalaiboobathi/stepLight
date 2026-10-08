@@ -7,7 +7,7 @@
 | A. Existing attack surfaces | ✅ report CSP (hashed, no network), viewer CSP header, extension-page CSP, XSS tests (viewer + report, 6 payload families), CLI session token + pairing, Host/Origin checks, 5 MB limit, rate limit, zod ingest schema, id validation, extension sender + message validation (+ 59 security tests) |
 | B. Network capture + SPA | ✅ webRequest capture (tab-scoped, header allowlist, body analysed in memory), `networkExfil` detector (URL/body secrets, copied page text, beacon after hidden instruction), opt-in MAIN-world deep capture, SPA navigation + debounced re-scan, 5 new red-team pages, SDK parity, viewer/report request metadata, real-Chromium e2e for each page + analytics control + perf test |
 | C. Privacy controls | ✅ capture levels (min/standard/full) in extension + SDK, always-on never-capture fields, site allow/deny lists + first-run suggestions + "paused" status, redaction engine rewrite (20+ kinds, encodings, custom patterns with ReDoS checks, fast-check fuzzing), redaction at the source, retention (extension 7 days; `steplight purge`), delete-all (settings page, viewer, `/api/purge`), REC badge + page pill, settings page |
-| D. Encryption at rest | ⏳ |
+| D. Encryption at rest | ✅ extension storage AES-256-GCM (non-extractable key in IndexedDB, IV per record), CLI/SDK file encryption (key or scrypt passphrase, 0600 files), password-protected JSON + HTML exports, pre-export dialog with strip options, `steplight decrypt` |
 | E. Enterprise controls | ⏳ |
 | F. Supply chain | ⏳ |
 | G. Honest docs | ⏳ |

@@ -4,6 +4,7 @@ import { isSafeId } from "../ids.js";
 import { redactText, sanitizeSnapshot } from "../redact.js";
 import { sanitizeStep } from "../sanitize.js";
 import { maxSeverity } from "../severity.js";
+import { decryptFile, encryptFile, isEncryptedText, resolveKey, writePrivate, type EncryptionOptions } from "./fileCrypto.js";
 import type { Run, RunSummary, Step } from "../types.js";
 
 /** Default location of run output, relative to the working directory. */
@@ -20,26 +21,38 @@ export class RunWriter {
   private run: Run;
   private queue: Promise<void> = Promise.resolve();
 
-  private constructor(root: string, run: Run) {
+  private constructor(
+    root: string,
+    run: Run,
+    private readonly key: Buffer | undefined,
+  ) {
     this.dir = runDir(root, run.id);
     this.run = run;
   }
 
+  /** Encrypt when a key is configured; the file's identity is bound into the ciphertext. */
+  private seal(text: string, file: string): string {
+    return this.key ? encryptFile(text, this.key, `${this.run.id}/${file}`) : text;
+  }
+
   /**
-   * Create the run folder and write the initial `run.json`.
+   * Create the run folder and write the initial `run.json`. Files are private to the owner
+   * (0600 on POSIX), and encrypted when an encryption key or passphrase is configured (see
+   * {@link EncryptionOptions}; the environment is used when `encryption` is omitted).
    * @example const w = await RunWriter.create(".steplight/runs", run)
    */
-  static async create(root: string, run: Run): Promise<RunWriter> {
-    const writer = new RunWriter(root, { ...run, steps: [] });
-    await fs.mkdir(path.join(writer.dir, "snapshots"), { recursive: true });
-    await fs.writeFile(path.join(writer.dir, "steps.jsonl"), "");
+  static async create(root: string, run: Run, encryption?: EncryptionOptions): Promise<RunWriter> {
+    const key = await resolveKey(root, encryption, true);
+    const writer = new RunWriter(root, { ...run, steps: [] }, key);
+    await fs.mkdir(path.join(writer.dir, "snapshots"), { recursive: true, mode: 0o700 });
+    await writePrivate(path.join(writer.dir, "steps.jsonl"), "");
     await writer.writeMeta();
     return writer;
   }
 
   private async writeMeta(): Promise<void> {
     const meta = { ...this.run, steps: undefined, task: redactText(this.run.task) };
-    await fs.writeFile(path.join(this.dir, "run.json"), JSON.stringify(meta, null, 2));
+    await writePrivate(path.join(this.dir, "run.json"), this.seal(JSON.stringify(meta, null, 2), "run.json"));
   }
 
   private enqueue(job: () => Promise<void>): Promise<void> {
@@ -57,11 +70,12 @@ export class RunWriter {
       const toWrite: Step = { ...step };
       if (snapshotText !== undefined) {
         toWrite.snapshotRef = `snapshots/${step.id}.txt`;
-        await fs.writeFile(path.join(this.dir, toWrite.snapshotRef), sanitizeSnapshot(snapshotText));
+        await writePrivate(path.join(this.dir, toWrite.snapshotRef), this.seal(sanitizeSnapshot(snapshotText), toWrite.snapshotRef));
       }
       await fs.appendFile(
         path.join(this.dir, "steps.jsonl"),
-        JSON.stringify(sanitizeStep(toWrite)) + "\n",
+        this.seal(JSON.stringify(sanitizeStep(toWrite)), "steps.jsonl") + "\n",
+        { mode: 0o600 },
       );
     });
   }
@@ -86,8 +100,9 @@ export async function writeRun(
   root: string,
   run: Run,
   snapshots: Record<string, string> = {},
+  encryption?: EncryptionOptions,
 ): Promise<void> {
-  const writer = await RunWriter.create(root, run);
+  const writer = await RunWriter.create(root, run, encryption);
   for (const step of run.steps) await writer.addStep(step, snapshots[step.id]);
   if (run.endedAt !== undefined) await writer.finish(run.status, run.endedAt);
 }
@@ -96,16 +111,19 @@ export async function writeRun(
  * Read a stored run (metadata + steps).
  * @example const run = await readRun(".steplight/runs", "20261008-101500-a1b2c3")
  */
-export async function readRun(root: string, runId: string): Promise<Run> {
+export async function readRun(root: string, runId: string, encryption?: EncryptionOptions): Promise<Run> {
   const dir = runDir(root, runId);
-  const meta = JSON.parse(await fs.readFile(path.join(dir, "run.json"), "utf8")) as Run;
+  const metaText = await fs.readFile(path.join(dir, "run.json"), "utf8");
+  const key = isEncryptedText(metaText) ? await resolveKey(root, encryption) : undefined;
+  const meta = JSON.parse(decryptFile(metaText, key, `${runId}/run.json`)) as Run;
   const raw = await fs.readFile(path.join(dir, "steps.jsonl"), "utf8").catch(() => "");
   const steps: Step[] = [];
   for (const line of raw.split("\n")) {
     if (!line.trim()) continue;
     try {
-      steps.push(JSON.parse(line) as Step);
-    } catch {
+      steps.push(JSON.parse(decryptFile(line, key, `${runId}/steps.jsonl`)) as Step);
+    } catch (err) {
+      if (err instanceof Error && err.name === "EncryptedRunError") throw err;
       /* skip a partially written line */
     }
   }
@@ -121,12 +139,16 @@ export async function readSnapshot(
   root: string,
   runId: string,
   step: Pick<Step, "snapshotRef">,
+  encryption?: EncryptionOptions,
 ): Promise<string | undefined> {
   if (!step.snapshotRef) return undefined;
   const dir = runDir(root, runId);
   const file = path.resolve(dir, step.snapshotRef);
   if (!file.startsWith(path.resolve(dir) + path.sep)) return undefined;
-  return fs.readFile(file, "utf8").catch(() => undefined);
+  const text = await fs.readFile(file, "utf8").catch(() => undefined);
+  if (text === undefined) return undefined;
+  const key = isEncryptedText(text) ? await resolveKey(root, encryption) : undefined;
+  return decryptFile(text, key, `${runId}/${step.snapshotRef}`);
 }
 
 /**
@@ -151,13 +173,13 @@ export function summarizeRun(run: Run): RunSummary {
  * List all runs under a root, newest first. Unreadable folders are skipped.
  * @example const runs = await listRuns(".steplight/runs")
  */
-export async function listRuns(root: string): Promise<RunSummary[]> {
+export async function listRuns(root: string, encryption?: EncryptionOptions): Promise<RunSummary[]> {
   const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
   const out: RunSummary[] = [];
   for (const e of entries) {
     if (!e.isDirectory() || !isSafeId(e.name)) continue;
     try {
-      out.push(summarizeRun(await readRun(root, e.name)));
+      out.push(summarizeRun(await readRun(root, e.name, encryption)));
     } catch {
       /* not a run folder */
     }
@@ -225,22 +247,43 @@ export interface PurgeOptions {
  * on a shared or unencrypted disk, use the encryption options as well.
  * @example await purgeRuns(".steplight/runs", { olderThanDays: 7 })
  */
-export async function purgeRuns(root: string, options: PurgeOptions): Promise<string[]> {
+export async function purgeRuns(root: string, options: PurgeOptions & { encryption?: EncryptionOptions }): Promise<string[]> {
   if (!options.all && (options.olderThanDays === undefined || !(options.olderThanDays >= 0))) return [];
   const cutoff = (options.now ?? Date.now()) - (options.olderThanDays ?? 0) * 86_400_000;
   const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
   const deleted: string[] = [];
   for (const e of entries) {
     if (!e.isDirectory() || !isSafeId(e.name)) continue;
-    try {
-      const run = await readRun(root, e.name);
-      if (options.all || run.startedAt < cutoff) {
-        await deleteRun(root, e.name);
-        deleted.push(e.name);
+    const runJson = path.join(root, e.name, "run.json");
+    const info = await fs.stat(runJson).catch(() => undefined);
+    if (!info) continue; // not a run folder: leave it alone
+    let doomed = options.all === true;
+    if (!doomed) {
+      // Age comes from the run itself; an encrypted run we cannot read falls back to the file's modification time.
+      let startedAt = info.mtimeMs;
+      try {
+        startedAt = (await readRun(root, e.name, options.encryption)).startedAt;
+      } catch {
+        /* keep the mtime */
       }
-    } catch {
-      /* not a run folder: leave it alone */
+      doomed = startedAt < cutoff;
+    }
+    if (doomed) {
+      await deleteRun(root, e.name);
+      deleted.push(e.name);
     }
   }
   return deleted;
+}
+
+/** How many run folders are encrypted (so a viewer can tell the user why it shows fewer runs than exist). */
+export async function countEncryptedRuns(root: string): Promise<number> {
+  const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+  let n = 0;
+  for (const e of entries) {
+    if (!e.isDirectory() || !isSafeId(e.name)) continue;
+    const head = await fs.readFile(path.join(root, e.name, "run.json"), "utf8").catch(() => "");
+    if (isEncryptedText(head)) n++;
+  }
+  return n;
 }

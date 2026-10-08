@@ -171,6 +171,11 @@ const SCRIPT = `
 })();
 `;
 
+/** The report's one inline style and script, so a wrapper page can allow exactly these by hash. */
+export function reportInlineSources(): { style: string; script: string } {
+  return { style: STYLE, script: SCRIPT };
+}
+
 /**
  * Content-Security-Policy for the report: nothing loads from anywhere, no network (`connect-src`
  * falls back to `default-src 'none'`), and only the report's own inline style and script (by hash).

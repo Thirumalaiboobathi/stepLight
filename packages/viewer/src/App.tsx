@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "reac
 import type { Run, RunSummary } from "@steplight/core";
 import { buildBundle, copyText, deleteAllRuns, downloadText, fetchRun, fetchRuns, importRunFile } from "./api";
 import { ComparePanel } from "./components/ComparePanel";
-import { generatePlaywrightTest, renderHtmlReport } from "@steplight/core";
+import { generatePlaywrightTest, isPasswordProtected, openProtectedExport, packageHtmlExport, packageJsonExport, type ExportOptions, type RunBundle } from "@steplight/core";
+import { ExportDialog } from "./components/ExportDialog";
 import { Logo } from "./components/Logo";
 import { firstFlaggedIndex } from "./format";
 import { RunList } from "./components/RunList";
@@ -35,6 +36,7 @@ export default function App() {
   const [compareId, setCompareId] = useState<string | undefined>();
   const [notice, setNotice] = useState<string | undefined>();
   const [armDelete, setArmDelete] = useState(false);
+  const [pendingExport, setPendingExport] = useState<{ kind: "json" | "html"; bundle: RunBundle; other?: RunBundle } | undefined>();
   const fileRef = useRef<HTMLInputElement>(null);
   const autoIndexFor = useRef<string | undefined>(undefined);
   const stepsRef = useRef(0);
@@ -123,11 +125,11 @@ export default function App() {
     setIndex(i);
   };
 
+  /** Build the bundle, then let the person review and trim it before anything is written. */
   const exportJson = async () => {
     if (!run) return;
     try {
-      const bundle = await buildBundle(run);
-      downloadText(`steplight-${run.id}.json`, JSON.stringify(bundle, null, 2));
+      setPendingExport({ kind: "json", bundle: await buildBundle(run) });
     } catch (e) {
       setNotice(`Export failed: ${(e as Error).message}`);
     }
@@ -137,11 +139,33 @@ export default function App() {
     try {
       const bundle = await buildBundle(run);
       const other = compare && compareId && compareId !== run.id ? await buildBundle(await fetchRun(compareId)) : undefined;
-      const html = renderHtmlReport(bundle, { compare: other });
-      downloadText(`steplight-report-${run.id}.html`, html, "text/html");
-      setNotice(other ? "Exported a self-contained HTML report including the comparison." : "Exported a self-contained HTML report.");
+      setPendingExport({ kind: "html", bundle, ...(other ? { other } : {}) });
     } catch (e) {
       setNotice(`Report export failed: ${(e as Error).message}`);
+    }
+  };
+  const finishExport = async (options: ExportOptions) => {
+    const pending = pendingExport;
+    setPendingExport(undefined);
+    if (!pending || !run) return;
+    try {
+      const locked = options.password ? ".locked" : "";
+      if (pending.kind === "json") {
+        downloadText(`steplight-${run.id}${locked}.json`, await packageJsonExport(pending.bundle, options));
+        setNotice(options.password ? "Exported a password-protected run file." : "Exported the run file.");
+      } else {
+        const html = await packageHtmlExport(pending.bundle, options, pending.other ? { compare: pending.other } : {});
+        downloadText(`steplight-report-${run.id}${locked}.html`, html, "text/html");
+        setNotice(
+          options.password
+            ? "Exported a password-protected HTML report."
+            : pending.other
+              ? "Exported a self-contained HTML report including the comparison."
+              : "Exported a self-contained HTML report.",
+        );
+      }
+    } catch (e) {
+      setNotice(`Export failed: ${(e as Error).message}`);
     }
   };
   const copyTest = async () => {
@@ -159,7 +183,21 @@ export default function App() {
     e.target.value = "";
     if (!file) return;
     try {
-      const id = await importRunFile(await file.text());
+      let text = await file.text();
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        parsed = undefined;
+      }
+      if (isPasswordProtected(parsed)) {
+        const password = window.prompt("This file is password-protected. Password:");
+        if (!password) return;
+        const opened = await openProtectedExport(text, password);
+        if (opened.kind !== "run-json") throw new Error("That is an encrypted report. Open it in a browser instead.");
+        text = opened.text;
+      }
+      const id = await importRunFile(text);
       loadRuns();
       select(id);
       setNotice(`Imported ${file.name}`);
@@ -282,6 +320,16 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {pendingExport && (
+        <ExportDialog
+          kind={pendingExport.kind}
+          bundle={pendingExport.bundle}
+          comparing={Boolean(pendingExport.other)}
+          onConfirm={(o) => void finishExport(o)}
+          onCancel={() => setPendingExport(undefined)}
+        />
+      )}
 
       {notice && (
         <p

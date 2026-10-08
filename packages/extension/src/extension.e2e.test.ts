@@ -115,7 +115,7 @@ describe.sequential("Chrome extension in a real browser", () => {
     await viewer.getByTestId("notice").filter({ hasText: "Copied a Playwright test" }).waitFor();
 
     // Single-file HTML report works from the extension viewer too (no server involved).
-    const [reportDownload] = await Promise.all([viewer.waitForEvent("download"), viewer.getByTestId("export-html").click()]);
+    const [reportDownload] = await Promise.all([viewer.waitForEvent("download"), (async () => { await viewer.getByTestId("export-html").click(); await viewer.getByTestId("export-confirm").click(); })()]);
     const reportFile = path.join(tmp, "report.html");
     await reportDownload.saveAs(reportFile);
     const reportHtml = await readFile(reportFile, "utf8");
@@ -124,7 +124,7 @@ describe.sequential("Chrome extension in a real browser", () => {
     expect(reportHtml).not.toContain("traveler@example.com");
 
     // Export JSON: redacted, with snapshots.
-    const [download] = await Promise.all([viewer.waitForEvent("download"), viewer.getByTestId("export").click()]);
+    const [download] = await Promise.all([viewer.waitForEvent("download"), (async () => { await viewer.getByTestId("export").click(); await viewer.getByTestId("export-confirm").click(); })()]);
     const file = path.join(tmp, "export.json");
     await download.saveAs(file);
     const text = await readFile(file, "utf8");

@@ -9,6 +9,8 @@ export interface KeyValueStore {
   get(keys: string | string[] | null): Promise<Record<string, unknown>>;
   set(items: Record<string, unknown>): Promise<void>;
   remove(keys: string | string[]): Promise<void>;
+  /** All key names, if the store can list them without reading values (needed to delete encrypted entries). */
+  keys?(): Promise<string[]>;
 }
 
 /** Limits for {@link LocalRunStore}. */
@@ -295,8 +297,8 @@ export class LocalRunStore {
   /** Delete every stored run (and nothing else). */
   clear(): Promise<void> {
     return this.serial(async () => {
-      const all = await this.kv.get(null);
-      await this.kv.remove(Object.keys(all).filter((k) => k.startsWith("sl:")));
+      const names = this.kv.keys ? await this.kv.keys() : Object.keys(await this.kv.get(null));
+      await this.kv.remove(names.filter((k) => k.startsWith("sl:")));
     });
   }
 }

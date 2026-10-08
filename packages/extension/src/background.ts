@@ -1,4 +1,13 @@
-import { LocalRunStore, configureRedaction, normalizeSettings, type KeyValueStore, type Settings } from "@steplight/core";
+import {
+  EncryptedKeyValueStore,
+  LocalRunStore,
+  chromeKeyValueStore,
+  configureRedaction,
+  indexedDbKeyProvider,
+  normalizeSettings,
+  type KeyValueStore,
+  type Settings,
+} from "@steplight/core";
 import { createMessageHandler, type BackgroundDeps, type Session } from "./background-logic.js";
 import { SERVER_URL } from "./messages.js";
 import { NetworkCollector, type WebRequestDetails } from "./network-collector.js";
@@ -21,7 +30,12 @@ async function injectIntoActiveTab(): Promise<void> {
   }
 }
 
-const local = new LocalRunStore(chrome.storage.local as unknown as KeyValueStore);
+// Runs are encrypted at rest: AES-256-GCM, a non-extractable key kept in IndexedDB, a fresh IV per record.
+const encryptedKv = new EncryptedKeyValueStore(
+  chromeKeyValueStore(chrome.storage.local as unknown as KeyValueStore),
+  indexedDbKeyProvider(),
+);
+const local = new LocalRunStore(encryptedKv);
 
 /** The CLI session token lives in session storage: cleared when the browser closes, like the CLI's own token. */
 async function getToken(): Promise<string | undefined> {
@@ -192,6 +206,7 @@ const handle = createMessageHandler(deps);
 
 // On every service-worker start: restore the recording badge and enforce retention.
 void ensureSessionLoaded().then(async () => {
+  await encryptedKv.migrate().catch((err) => console.warn("[steplight] could not encrypt older runs:", err));
   await getSettings();
   await showBadge(cachedSession !== undefined);
   await runRetention(cachedSession?.runId);

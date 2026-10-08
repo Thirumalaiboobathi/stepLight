@@ -2,8 +2,8 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import { DEFAULT_RUNS_DIR, formatTokens, summarizeTokens, clearRuns, exportRunOtlp, generatePlaywrightTest, listRuns, purgeRuns, readRun, DEFAULT_OTLP_ENDPOINT } from "@steplight/core/node";
-import { renderStoredReport } from "./reportCommand.js";
+import { DEFAULT_RUNS_DIR, formatTokens, summarizeTokens, clearRuns, exportRunOtlp, generatePlaywrightTest, countEncryptedRuns, effectiveEncryption, listRuns, purgeRuns, readRun, DEFAULT_OTLP_ENDPOINT } from "@steplight/core/node";
+import { exportOptionsFromFlags, renderStoredBundle, renderStoredExport, renderStoredReport, type ExportFlags } from "./reportCommand.js";
 import { runCheck } from "./checkCommand.js";
 import { registerRedteam } from "./redteamCommand.js";
 import type { CheckFormat } from "./checkFormats.js";
@@ -31,11 +31,22 @@ export function buildProgram(): Command {
     .option("-d, --dir <dir>", "runs directory", process.env.STEPLIGHT_DIR ?? DEFAULT_RUNS_DIR)
     .option("--host <address>", "address to bind (default 127.0.0.1; anything else exposes your data to the network)")
     .option("--extension-id <id...>", "only accept the API from this Chrome extension id (repeatable)")
+    .option("--encrypt", "encrypt runs received from the extension (needs $STEPLIGHT_ENCRYPTION_KEY or $STEPLIGHT_PASSPHRASE)")
     .option("--retention-days <n>", "delete runs older than n days when the viewer starts (also $STEPLIGHT_RETENTION_DAYS)")
-    .action(async (opts: { port: string; dir: string; host?: string; extensionId?: string[]; retentionDays?: string }) => {
+    .action(async (opts: { port: string; dir: string; host?: string; extensionId?: string[]; retentionDays?: string; encrypt?: boolean }) => {
       const here = path.dirname(fileURLToPath(import.meta.url));
       const runsDir = path.resolve(opts.dir);
       const host = opts.host ?? "127.0.0.1";
+      if (opts.encrypt && !effectiveEncryption()) {
+        console.error("steplight: --encrypt needs a key. Set STEPLIGHT_ENCRYPTION_KEY (64 hex characters) or STEPLIGHT_PASSPHRASE.");
+        process.exitCode = 2;
+        return;
+      }
+      if (effectiveEncryption()) console.log("Encryption at rest: ON (AES-256-GCM). New runs are written encrypted.");
+      else {
+        const locked = await countEncryptedRuns(runsDir);
+        if (locked > 0) console.log(`${locked} encrypted run(s) found. Set STEPLIGHT_ENCRYPTION_KEY or STEPLIGHT_PASSPHRASE to view them.`);
+      }
       const retention = Number(opts.retentionDays ?? process.env.STEPLIGHT_RETENTION_DAYS ?? "");
       if (opts.retentionDays !== undefined || process.env.STEPLIGHT_RETENTION_DAYS) {
         if (Number.isFinite(retention) && retention >= 0) {
@@ -113,10 +124,24 @@ export function buildProgram(): Command {
     .command("export <runId>")
     .description("Export a stored run: print JSON, or re-send it as OpenTelemetry spans with --otlp")
     .option("--otlp", "send the run to the OTLP/HTTP endpoint")
+    .option("--bundle", "write a complete run file (with page snapshots) that the viewer can import")
+    .option("-o, --out <file>", "with --bundle: output file (default: steplight-<runId>.json)")
+    .option("--strip-snapshots", "leave out all page snapshot text")
+    .option("--strip-bodies", "leave out request body previews")
+    .option("--strip-query", "remove query strings and fragments from URLs")
+    .option("--password-env <VAR>", "encrypt the file with the password held in this environment variable")
+
     .option("--endpoint <url>", `OTLP endpoint (default: $OTEL_EXPORTER_OTLP_ENDPOINT or ${DEFAULT_OTLP_ENDPOINT})`)
     .option("-d, --dir <dir>", "runs directory", process.env.STEPLIGHT_DIR ?? DEFAULT_RUNS_DIR)
-    .action(async (runId: string, opts: { otlp?: boolean; endpoint?: string; dir: string }) => {
+    .action(async (runId: string, opts: { otlp?: boolean; endpoint?: string; dir: string; bundle?: boolean; out?: string } & ExportFlags) => {
       try {
+        if (opts.bundle) {
+          const options = exportOptionsFromFlags(opts);
+          const out = path.resolve(opts.out ?? `steplight-${runId}${options.password ? ".locked" : ""}.json`);
+          await writeFile(out, await renderStoredBundle(opts.dir, runId, options));
+          console.log(`Wrote ${out}${options.password ? " (password-protected)" : ""}.`);
+          return;
+        }
         const run = await readRun(path.resolve(opts.dir), runId);
         if (!opts.otlp) {
           console.log(JSON.stringify(run, null, 2));
@@ -220,13 +245,40 @@ export function buildProgram(): Command {
     .description("Write a single-file, self-contained HTML report of a run (share it or attach it to an issue)")
     .option("-o, --out <file>", "output file (default: steplight-<runId>.html)")
     .option("--diff <runId>", "also include a comparison with this run")
+    .option("--strip-snapshots", "leave out all page snapshot text")
+    .option("--strip-bodies", "leave out request body previews")
+    .option("--strip-query", "remove query strings and fragments from URLs")
+    .option("--password-env <VAR>", "encrypt the file with the password held in this environment variable")
     .option("-d, --dir <dir>", "runs directory", process.env.STEPLIGHT_DIR ?? DEFAULT_RUNS_DIR)
-    .action(async (runId: string, opts: { out?: string; diff?: string; dir: string }) => {
+    .action(async (runId: string, opts: { out?: string; diff?: string; dir: string } & ExportFlags) => {
       try {
-        const html = await renderStoredReport(opts.dir, runId, opts.diff);
+        const options = exportOptionsFromFlags(opts);
+        const html = Object.keys(options).length > 0 ? await renderStoredExport(opts.dir, runId, opts.diff, options) : await renderStoredReport(opts.dir, runId, opts.diff);
         const out = path.resolve(opts.out ?? `steplight-${runId}.html`);
         await writeFile(out, html);
-        console.log(`Wrote ${out} (${(Buffer.byteLength(html) / 1024).toFixed(0)} KB). It is self-contained and makes no network requests.`);
+        console.log(`Wrote ${out} (${(Buffer.byteLength(html) / 1024).toFixed(0)} KB). It is self-contained and makes no network requests.${options.password ? " Encrypted: it asks for the password before showing anything." : ""}`);
+      } catch (err) {
+        console.error(`steplight: ${err instanceof Error ? err.message : String(err)}`);
+        process.exitCode = 1;
+      }
+    });
+
+  program
+    .command("decrypt <file>")
+    .description("Decrypt a password-protected export (run file or HTML report)")
+    .requiredOption("--password-env <VAR>", "environment variable that holds the password")
+    .option("-o, --out <file>", "output file (default: the input name without .locked)")
+    .action(async (file: string, opts: { passwordEnv: string; out?: string }) => {
+      try {
+        const password = process.env[opts.passwordEnv];
+        if (!password) throw new Error(`Environment variable ${opts.passwordEnv} is not set.`);
+        const { openProtectedExport } = await import("@steplight/core/node");
+        const { readFile } = await import("node:fs/promises");
+        const opened = await openProtectedExport(await readFile(file, "utf8"), password);
+        const out = path.resolve(opts.out ?? file.replace(/\.locked(?=\.)/, ""));
+        if (out === path.resolve(file)) throw new Error("Choose an output file with --out (it would overwrite the input).");
+        await writeFile(out, opened.text);
+        console.log(`Wrote ${out} (${opened.kind === "run-json" ? "run file" : "HTML report"}).`);
       } catch (err) {
         console.error(`steplight: ${err instanceof Error ? err.message : String(err)}`);
         process.exitCode = 1;
