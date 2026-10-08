@@ -1,6 +1,7 @@
 import { LocalRunStore, type KeyValueStore } from "@steplight/core";
 import { createMessageHandler, type BackgroundDeps, type Session } from "./background-logic.js";
-import { SERVER_URL, type ExtensionMessage } from "./messages.js";
+import { SERVER_URL } from "./messages.js";
+import { parseMessage, senderAllowed } from "./validate.js";
 
 const SCRIPT_ID = "steplight-recorder";
 
@@ -13,11 +14,30 @@ async function injectIntoActiveTab(): Promise<void> {
 
 const local = new LocalRunStore(chrome.storage.local as unknown as KeyValueStore);
 
+const TOKEN_KEY = "cliToken";
+
+/** The CLI session token lives in session storage: cleared when the browser closes, like the CLI's own token. */
+async function getToken(): Promise<string | undefined> {
+  const stored = await chrome.storage.session.get(TOKEN_KEY);
+  const token = stored[TOKEN_KEY];
+  return typeof token === "string" ? token : undefined;
+}
+
 const deps: BackgroundDeps = {
   local,
+  getToken,
+  async setToken(token) {
+    if (token) await chrome.storage.session.set({ [TOKEN_KEY]: token });
+    else await chrome.storage.session.remove(TOKEN_KEY);
+  },
   async probe() {
+    const token = await getToken();
+    if (!token) return false; // not paired: stay standalone
     try {
-      const res = await fetch(`${SERVER_URL}/api/runs`, { signal: AbortSignal.timeout(1500) });
+      const res = await fetch(`${SERVER_URL}/api/runs`, {
+        headers: { authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(1500),
+      });
       return res.ok;
     } catch {
       return false;
@@ -32,9 +52,11 @@ const deps: BackgroundDeps = {
     else await chrome.storage.session.remove("session");
   },
   async post(message) {
+    const token = await getToken();
+    if (!token) throw new Error("not paired with the Steplight CLI");
     const res = await fetch(`${SERVER_URL}/api/ingest`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
       body: JSON.stringify(message),
     });
     if (!res.ok) throw new Error(`Steplight server answered ${res.status}`);
@@ -60,7 +82,12 @@ const deps: BackgroundDeps = {
 
 const handle = createMessageHandler(deps);
 
-chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
+// Only this extension's own popup and content scripts may talk to the worker. Everything else
+// (other extensions, web pages) is ignored, and malformed messages are dropped without a reply.
+// The manifest declares no `externally_connectable`, so web pages cannot reach this listener at all.
+chrome.runtime.onMessage.addListener((raw: unknown, sender, sendResponse) => {
+  const message = parseMessage(raw);
+  if (!message || !senderAllowed(message, sender, chrome.runtime.id)) return false;
   void handle(message).then(sendResponse);
   return true; // reply asynchronously
 });

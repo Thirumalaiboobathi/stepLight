@@ -3,7 +3,6 @@ import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { Server } from "node:http";
 import { chromium, type Browser } from "playwright";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { runDemo } from "../../../examples/demo-agent/src/demo.mjs";
@@ -13,9 +12,10 @@ import { createViewerServer, findViewerDir } from "./server.js";
 const FLIGHT_TASK = "Book the cheapest flight from Delhi to Mumbai";
 
 let dir: string;
-let server: Server;
+let server: ViewerServer;
 let browser: Browser;
 let base: string;
+let entry: string;
 
 beforeAll(async () => {
   dir = await mkdtemp(path.join(os.tmpdir(), "steplight-e2e-"));
@@ -25,6 +25,7 @@ beforeAll(async () => {
   server = createViewerServer({ runsDir: dir, viewerDir });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  entry = `${base}/#token=${server.token}`;
   browser = await chromium.launch({ headless: true });
 }, 120_000);
 
@@ -38,7 +39,7 @@ afterAll(async () => {
 describe("viewer", () => {
   it("shows the demo run and its hidden_instruction flag with highlighted evidence", async () => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-    await page.goto(base);
+    await page.goto(entry);
     await page.getByTestId("run-item").filter({ has: page.getByText(FLIGHT_TASK, { exact: true }) }).click();
     await page.locator('[data-testid="step-item"][data-kind="page_read"][data-severity="high"]').first().click();
     const detail = page.getByTestId("step-detail");
@@ -54,7 +55,7 @@ describe("viewer", () => {
 
   it("replays steps automatically", async () => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-    await page.goto(base);
+    await page.goto(entry);
     await page.getByTestId("run-item").filter({ has: page.getByText(FLIGHT_TASK, { exact: true }) }).click();
     await page.getByTestId("step-item").first().waitFor();
     await page.getByTestId("replay").click();
@@ -68,7 +69,7 @@ describe("viewer", () => {
 
   it("fits a 375px screen without horizontal scrolling", async () => {
     const page = await browser.newPage({ viewport: { width: 375, height: 800 } });
-    await page.goto(base);
+    await page.goto(entry);
     await page.getByTestId("run-item").first().click();
     await page.getByTestId("step-item").first().waitFor();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -80,7 +81,7 @@ describe("viewer", () => {
 describe("viewer polish", () => {
   it("opens the newest run on load and jumps to its first flagged step", async () => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-    await page.goto(base);
+    await page.goto(entry);
     // Newest run is the stuck agent's: it opens on the first flagged step (the loop flag),
     // with the "Why did this fail?" panel available for its failed clicks.
     await page.getByTestId("step-item").first().waitFor();
@@ -101,7 +102,7 @@ describe("viewer polish", () => {
 
   it("shows a Clean badge for runs without medium+ flags and keeps low flags in details only", async () => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-    await page.goto(base);
+    await page.goto(entry);
     await page.getByTestId("run-item").first().waitFor();
     const clean = page.getByTestId("run-item").filter({ hasText: "Download the annual report PDF" });
     await expect_(clean.getByTestId("clean-badge")).toContainText("Clean");
@@ -120,7 +121,7 @@ describe("viewer polish", () => {
 
   it("shows the full task on hover and wraps long titles to two lines", async () => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-    await page.goto(base);
+    await page.goto(entry);
     const task = page.getByTestId("run-task").filter({ has: page.getByText(FLIGHT_TASK, { exact: true }) });
     await task.waitFor();
     expect(await task.getAttribute("title")).toBe("Book the cheapest flight from Delhi to Mumbai");
@@ -138,7 +139,7 @@ describe("viewer polish", () => {
     await new Promise<void>((r) => empty.listen(0, "127.0.0.1", r));
     const url = `http://127.0.0.1:${(empty.address() as AddressInfo).port}`;
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-    await page.goto(url);
+    await page.goto(`${url}/#token=${empty.token}`);
     const replay = page.getByTestId("replay");
     await replay.waitFor();
     expect(await replay.getAttribute("aria-disabled")).toBe("true");
@@ -147,7 +148,7 @@ describe("viewer polish", () => {
     expect(await page.getByTestId("step-item").count()).toBe(0);
 
     // With runs present the button is enabled once the run loads.
-    await page.goto(base);
+    await page.goto(entry);
     await page.getByTestId("step-item").first().waitFor();
     expect(await page.getByTestId("replay").getAttribute("aria-disabled")).toBe("false");
     await page.close();
@@ -158,7 +159,7 @@ describe("viewer polish", () => {
 
   it("renders the SVG logo instead of an emoji", async () => {
     const page = await browser.newPage();
-    await page.goto(base);
+    await page.goto(entry);
     await page.getByTestId("logo").waitFor();
     expect(await page.locator("header h1").innerText()).not.toMatch(/🔦|🚀/);
     await page.close();
@@ -168,7 +169,7 @@ describe("viewer polish", () => {
 describe("failure explainer", () => {
   it("explains covered, disabled and mistyped-selector failures and flags the loop", async () => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-    await page.goto(base);
+    await page.goto(entry);
     await page.getByTestId("run-item").filter({ has: page.getByText("Place the order", { exact: true }) }).click();
     await page.getByTestId("step-item").first().waitFor();
     expect(await page.getByTestId("failed-badge").count()).toBe(5);
@@ -188,7 +189,7 @@ describe("failure explainer", () => {
 describe("run diff / compare mode", () => {
   it("compares the hijacked run with the control run and highlights the first divergence", async () => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-    await page.goto(base);
+    await page.goto(entry);
     await page.getByTestId("run-item").filter({ has: page.getByText(FLIGHT_TASK, { exact: true }) }).click();
     await page.getByTestId("compare").click();
     const select = page.getByTestId("compare-select");
@@ -214,7 +215,7 @@ describe("run diff / compare mode", () => {
 
   it("keeps the compare view inside a 375px screen", async () => {
     const page = await browser.newPage({ viewport: { width: 375, height: 800 } });
-    await page.goto(base);
+    await page.goto(entry);
     await page.getByTestId("run-item").filter({ has: page.getByText(FLIGHT_TASK, { exact: true }) }).click();
     await page.getByTestId("compare").click();
     await page.getByTestId("compare-select").waitFor();
@@ -228,7 +229,7 @@ describe("copy as Playwright test", () => {
   it("copies a runnable test for the selected run to the clipboard", async () => {
     const context = await browser.newContext({ permissions: ["clipboard-read", "clipboard-write"] });
     const page = await context.newPage();
-    await page.goto(base);
+    await page.goto(entry);
     await page.getByTestId("run-item").filter({ has: page.getByText(FLIGHT_TASK, { exact: true }) }).click();
     await page.getByTestId("step-item").first().waitFor();
     await page.getByTestId("copy-test").click();
@@ -245,7 +246,7 @@ describe("copy as Playwright test", () => {
 describe("token cost", () => {
   it("shows the run total, the most expensive pages and a per-page breakdown", async () => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-    await page.goto(base);
+    await page.goto(entry);
     await page.getByTestId("run-item").filter({ has: page.getByText(FLIGHT_TASK, { exact: true }) }).click();
     const summary = page.getByTestId("token-summary");
     await summary.waitFor();
@@ -265,7 +266,7 @@ describe("token cost", () => {
 describe("shareable HTML report", () => {
   it("exports one self-contained file (with the comparison) that opens offline", async () => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-    await page.goto(base);
+    await page.goto(entry);
     await page.getByTestId("run-item").filter({ has: page.getByText(FLIGHT_TASK, { exact: true }) }).click();
     await page.getByTestId("compare").click();
     const select = page.getByTestId("compare-select");
@@ -297,7 +298,7 @@ describe("shareable HTML report", () => {
   }, 90_000);
 
   it("steplight report writes the same report from disk, well under 2 MB for the demo run", async () => {
-    const list = await (await fetch(`${base}/api/runs`)).json() as { id: string; task: string }[];
+    const list = await (await fetch(`${base}/api/runs`, { headers: { authorization: `Bearer ${server.token}` } })).json() as { id: string; task: string }[];
     const hijacked = list.find((r) => r.task === FLIGHT_TASK)!;
     const control = list.find((r) => r.task.endsWith("(control page)"))!;
     const out = path.join(dir, "cli-report.html");

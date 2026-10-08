@@ -11,6 +11,7 @@ import {
   type StepKind,
 } from "@steplight/core";
 import type { IngestMessage } from "./ingest-types.js";
+import { parsePairingToken } from "./validate.js";
 import type { ConnectionMode, ExtensionMessage, PageEventMsg, StatusReply } from "./messages.js";
 
 /** Recording state kept in extension storage so it survives service-worker restarts. */
@@ -40,6 +41,9 @@ export interface BackgroundDeps {
   enableRecorder(): Promise<void>;
   disableRecorder(): Promise<void>;
   now(): number;
+  /** CLI session token store (optional; tests that do not pair can omit it). */
+  getToken?(): Promise<string | undefined>;
+  setToken?(token: string | undefined): Promise<void>;
 }
 
 const MAX_PAGES = 5;
@@ -207,11 +211,28 @@ export async function handleMessage(
         return reply(session);
       }
       case "status":
-        return reply(session, session ? undefined : await mode(deps));
+        return reply(session, session ? undefined : await mode(deps), deps.getToken ? await paired(deps) : undefined);
+      case "pair": {
+        const token = parsePairingToken(message.link);
+        if (!token) return { ...reply(session), error: "That does not look like a Steplight pairing link." };
+        await deps.setToken?.(token);
+        if (!session && !(await deps.probe())) {
+          await deps.setToken?.(undefined);
+          return { ...reply(session), error: "Could not reach the CLI with that token (is `steplight view` running? is the link current?)." };
+        }
+        return reply(session, session ? undefined : "connected", true);
+      }
+      case "unpair":
+        await deps.setToken?.(undefined);
+        return reply(session, session ? undefined : "standalone", false);
     }
   } catch (err) {
     return { ...reply(session), error: describe(err) };
   }
+}
+
+async function paired(deps: BackgroundDeps): Promise<boolean> {
+  return (await deps.getToken?.()) !== undefined;
 }
 
 async function mode(deps: BackgroundDeps): Promise<ConnectionMode> {
@@ -240,10 +261,11 @@ async function fallBackToLocal(session: Session, pending: IngestMessage[], deps:
   await storeLocally(session.runId, pending, deps);
 }
 
-function reply(session: Session | undefined, idleMode: ConnectionMode = "standalone"): StatusReply {
+function reply(session: Session | undefined, idleMode: ConnectionMode = "standalone", paired?: boolean): StatusReply {
+  const extra = paired === undefined ? {} : { paired };
   return session
-    ? { recording: true, task: session.task, runId: session.runId, steps: session.steps.length, mode: session.mode }
-    : { recording: false, steps: 0, mode: idleMode };
+    ? { recording: true, task: session.task, runId: session.runId, steps: session.steps.length, mode: session.mode, ...extra }
+    : { recording: false, steps: 0, mode: idleMode, ...extra };
 }
 
 /**

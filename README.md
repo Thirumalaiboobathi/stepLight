@@ -78,7 +78,7 @@ pnpm demo          # runs scripted agents against local fixture pages → .stepl
 pnpm view          # = steplight view → http://localhost:4777
 ```
 
-Open <http://localhost:4777>. The newest run opens on its first flagged step. Click through the timeline or press **▶ Replay** (steps auto-advance every 800 ms). Flagged steps (medium and above) are coloured by severity; low findings live in the step details. A green **Clean** badge marks runs with nothing at medium or above. The right panel shows the page snapshot with the hidden text highlighted, the request body, a "caused by" link, a token estimate and, for failed actions, a "Why did this fail?" panel.
+Open the link `steplight view` prints (`http://127.0.0.1:4777/#token=…`; the token is random per start and the viewer removes it from the address bar). The newest run opens on its first flagged step. Click through the timeline or press **▶ Replay** (steps auto-advance every 800 ms). Flagged steps (medium and above) are coloured by severity; low findings live in the step details. A green **Clean** badge marks runs with nothing at medium or above. The right panel shows the page snapshot with the hidden text highlighted, the request body, a "caused by" link, a token estimate and, for failed actions, a "Why did this fail?" panel.
 
 `pnpm demo` records four runs: the hijacked booking, the same booking on a page *without* the injection (a control), a benign download, and an agent stuck on a covered and a disabled button. It clears its previous runs first.
 
@@ -100,7 +100,7 @@ pnpm --filter @steplight/extension package    # builds, then zips dist/ for the 
 The popup shows the current mode:
 
 - **Standalone**: the CLI server is not running. Runs are stored inside the extension (`chrome.storage.local`, capped at about 8 MB, oldest runs evicted first) and opened in the bundled viewer (`viewer.html`).
-- **Connected to CLI**: `steplight view` is running on `localhost:4777`; steps are sent there and kept as files, and **Open viewer** opens the CLI viewer.
+- **Connected to CLI**: `steplight view` is running on `localhost:4777` and you pasted its link into **Pair with CLI** in the popup; steps are sent there and kept as files, and **Open viewer** opens the CLI viewer. Without pairing the extension stays standalone.
 
 **Permissions, and why:**
 
@@ -242,7 +242,8 @@ steplight clear [--keep 5]       # delete recorded runs, optionally keeping the 
 ## CLI reference
 
 ```
-steplight view [--port 4777] [--dir .steplight/runs]    viewer + JSON API (127.0.0.1 only)
+steplight view [--port 4777] [--dir .steplight/runs] [--host addr] [--extension-id id]
+                                                        viewer + JSON API (127.0.0.1 only, session token required)
 steplight diff <a> <b> [--json]                         first divergence between two runs
 steplight check [runId|--latest] [--rules f] [--format text|junit|sarif] [--out f]
 steplight replay-script <runId> [--out f] [--base-url u]

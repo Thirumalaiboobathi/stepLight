@@ -17,6 +17,22 @@ describe("manifest.json", () => {
   });
 });
 
+describe("manifest security", () => {
+  const csp = manifest.content_security_policy.extension_pages as string;
+  it("sets a strict extension-page CSP", () => {
+    expect(csp).toContain("script-src 'self'");
+    expect(csp).toContain("object-src 'none'");
+    expect(csp).not.toMatch(/unsafe-inline|unsafe-eval|\*|https:|data:|blob:/);
+    // network only to the local CLI
+    for (const url of csp.match(/https?:\/\/[^\s;]+/g) ?? []) expect(url).toMatch(/^http:\/\/(localhost|127\.0\.0\.1):4777$/);
+  });
+  it("is not reachable from web pages or other extensions", () => {
+    expect(manifest.externally_connectable).toBeUndefined();
+    expect(manifest.web_accessible_resources).toBeUndefined();
+    expect(manifest.content_scripts).toBeUndefined();
+  });
+});
+
 describe("manifest icons", () => {
   it("declares 16/32/48/128 px icons that exist in public/", () => {
     expect(Object.keys(manifest.icons).sort()).toEqual(["128", "16", "32", "48"]);

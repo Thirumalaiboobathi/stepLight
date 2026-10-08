@@ -1,5 +1,6 @@
 import { createBundle, type RunBundle } from "./bundle.js";
 import { KIND_ICON, describeStep, offset, shortUrl } from "./describe.js";
+import { sha256Base64 } from "./hash.js";
 import { diffRuns, type RunDiff } from "./diff.js";
 import { redactText } from "./redact.js";
 import { maxSeverity, severityRank } from "./severity.js";
@@ -152,7 +153,7 @@ pre{margin:.3rem 0;padding:.6rem;border:1px solid var(--line);border-radius:6px;
 pre.snapshot{max-height:24rem}mark{background:var(--mark);color:inherit;padding:0 2px;border-radius:3px}
 .flags{list-style:none;padding:0;margin:0}.flag{border:1px solid var(--line);border-left:4px solid var(--low);border-radius:6px;padding:.4rem .6rem;margin:.3rem 0}.flag.sev-medium{border-left-color:var(--medium)}.flag.sev-high{border-left-color:var(--high)}.flag.sev-critical{border-left-color:var(--critical)}.flag p{margin:.2rem 0}
 .failure{border:1px solid #fca5a5;background:rgba(220,38,38,.07);border-radius:6px;padding:.3rem .8rem;margin:.6rem 0}.link{margin:.3rem 0}a{color:#6366f1}
-.cards{display:flex;flex-wrap:wrap;gap:.6rem}.card{border:1px solid var(--line);border-radius:8px;padding:.5rem .8rem;background:var(--card)}.card b{display:block;font-size:1.1rem}
+.cards.top{margin-top:.8rem}.cards{display:flex;flex-wrap:wrap;gap:.6rem}.card{border:1px solid var(--line);border-radius:8px;padding:.5rem .8rem;background:var(--card)}.card b{display:block;font-size:1.1rem}
 table.diff{width:100%;border-collapse:collapse;table-layout:fixed}table.diff td,table.diff th{border:1px solid var(--line);padding:.35rem .5rem;vertical-align:top;font-size:.85rem;word-break:break-word;text-align:left}
 tr.changed td{background:rgba(217,119,6,.12)}tr.onlyA td{background:rgba(220,38,38,.10)}tr.onlyB td{background:rgba(22,163,74,.12)}tr.first td{outline:2px solid #6366f1;outline-offset:-2px}td.empty{background:transparent!important}
 .summary{border:1px solid var(--line);border-radius:8px;padding:.6rem .8rem}.summary.diverged{border-color:var(--medium)}.summary.ok{border-color:#16a34a}
@@ -169,6 +170,20 @@ const SCRIPT = `
   window.addEventListener("hashchange",show);show();
 })();
 `;
+
+/**
+ * Content-Security-Policy for the report: nothing loads from anywhere, no network (`connect-src`
+ * falls back to `default-src 'none'`), and only the report's own inline style and script (by hash).
+ */
+export function reportCsp(style: string, script: string): string {
+  return [
+    "default-src 'none'",
+    `style-src 'sha256-${sha256Base64(style)}'`,
+    `script-src 'sha256-${sha256Base64(script)}'`,
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join("; ");
+}
 
 /**
  * Render a run as ONE self-contained HTML file: timeline, flags, step details with highlighted
@@ -205,10 +220,12 @@ export function renderHtmlReport(input: RunBundle, options: HtmlReportOptions = 
 
   const steps = run.steps.map((s) => stepHtml(run, s, snapshots, budget)).join("\n");
   const title = `Steplight report: ${redactText(run.task)}`;
+  const csp = reportCsp(STYLE, SCRIPT);
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="${csp}" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="generator" content="Steplight" />
 <title>${esc(title)}</title>
@@ -219,7 +236,7 @@ export function renderHtmlReport(input: RunBundle, options: HtmlReportOptions = 
 <p class="muted">Steplight run report</p>
 <h1>${esc(run.task)}</h1>
 <div class="meta"><span>Run <span class="mono">${esc(run.id)}</span></span><span>Status: ${esc(run.status)}</span><span>Started ${new Date(run.startedAt).toISOString()}</span>${run.endedAt ? `<span>Duration ${((run.endedAt - run.startedAt) / 1000).toFixed(1)}s</span>` : ""}</div>
-<div class="cards" style="margin-top:.8rem">${cards}</div>
+<div class="cards top">${cards}</div>
 ${expensive}
 ${comparison}
 <h2>Timeline</h2>

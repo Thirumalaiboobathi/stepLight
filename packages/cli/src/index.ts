@@ -8,7 +8,7 @@ import { runCheck } from "./checkCommand.js";
 import { registerRedteam } from "./redteamCommand.js";
 import type { CheckFormat } from "./checkFormats.js";
 import { diffStored, formatDiff } from "./diffCommand.js";
-import { createViewerServer, findViewerDir } from "./server.js";
+import { createViewerServer, findViewerDir, isLoopbackHost } from "./server.js";
 
 /** Default port of the local viewer / ingest server. */
 export const DEFAULT_PORT = 4777;
@@ -29,17 +29,42 @@ export function buildProgram(): Command {
     .description("Serve the replay viewer and JSON API for recorded runs (localhost only)")
     .option("-p, --port <port>", "port to listen on", String(DEFAULT_PORT))
     .option("-d, --dir <dir>", "runs directory", process.env.STEPLIGHT_DIR ?? DEFAULT_RUNS_DIR)
-    .action((opts: { port: string; dir: string }) => {
+    .option("--host <address>", "address to bind (default 127.0.0.1; anything else exposes your data to the network)")
+    .option("--extension-id <id...>", "only accept the API from this Chrome extension id (repeatable)")
+    .action((opts: { port: string; dir: string; host?: string; extensionId?: string[] }) => {
       const here = path.dirname(fileURLToPath(import.meta.url));
       const runsDir = path.resolve(opts.dir);
-      const server = createViewerServer({ runsDir, viewerDir: findViewerDir(here) });
+      const host = opts.host ?? "127.0.0.1";
+      const server = createViewerServer({
+        runsDir,
+        viewerDir: findViewerDir(here),
+        ...(opts.extensionId ? { extensionIds: opts.extensionId } : {}),
+        ...(isLoopbackHost(host) ? {} : { extraHosts: [host] }),
+      });
       const port = Number(opts.port);
       server.on("error", (err) => {
         console.error(`steplight: cannot listen on port ${port}: ${err.message}`);
         process.exitCode = 1;
       });
-      server.listen(port, "127.0.0.1", () => {
-        console.log(`Steplight viewer: http://localhost:${port}\nRuns directory:   ${runsDir}`);
+      if (!isLoopbackHost(host)) {
+        console.error(
+          `
+!!! WARNING: binding to ${host}. Other machines on your network can reach this server.
+` +
+            `!!! Recorded runs may contain sensitive page content. Only continue on a network you fully trust.
+`,
+        );
+      }
+      server.listen(port, host, () => {
+        console.log(
+          `Steplight viewer: http://127.0.0.1:${port}/#token=${server.token}
+` +
+            `Runs directory:   ${runsDir}
+` +
+            `Open the link above (it carries this session's access token) and paste the same link into
+` +
+            `the extension popup (Pair with CLI) to send runs here. The token changes on every start.`,
+        );
       });
     });
 
@@ -190,7 +215,7 @@ export function buildProgram(): Command {
 
   return program;
 }
-export { createViewerServer, findViewerDir } from "./server.js";
+export { createViewerServer, findViewerDir, isLoopbackHost, VIEWER_CSP, type ViewerServer } from "./server.js";
 export type { IngestMessage, ServerOptions } from "./server.js";
 export { diffStored, formatDiff } from "./diffCommand.js";
 export { runCheck } from "./checkCommand.js";

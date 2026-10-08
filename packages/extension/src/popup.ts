@@ -25,6 +25,9 @@ function render(status: StatusReply): void {
   badge.title = connected
     ? "Steps are sent to the Steplight CLI server on localhost:4777."
     : "No CLI server found. Runs are stored inside the extension and viewed in the bundled viewer.";
+  $("pairState").textContent = status.paired
+    ? "Paired with the CLI for this browser session."
+    : "Not paired. Without pairing, runs stay inside the extension.";
   viewerUrl = connected ? SERVER_URL : chrome.runtime.getURL("viewer.html");
   $("error").textContent = status.error
     ? status.error
@@ -57,3 +60,11 @@ $("viewer").addEventListener("click", (e) => {
 });
 void refresh();
 setInterval(() => void refresh(), 1500);
+
+$("pair").addEventListener("click", () => {
+  const input = $<HTMLInputElement>("pairLink");
+  void ask({ type: "pair", link: input.value }).then((status) => {
+    input.value = "";
+    render(status);
+  });
+});

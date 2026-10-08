@@ -19,3 +19,4 @@ export * from "./check.js";
 export * from "./tokens.js";
 export * from "./describe.js";
 export * from "./htmlReport.js";
+export * from "./hash.js";

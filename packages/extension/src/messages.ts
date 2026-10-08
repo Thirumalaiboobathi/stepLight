@@ -29,7 +29,10 @@ export type ExtensionMessage =
   | { type: "event"; event: PageEventMsg }
   | { type: "start"; task: string }
   | { type: "stop" }
-  | { type: "status" };
+  | { type: "status" }
+  /** Store the CLI session token from the pairing link printed by `steplight view`. */
+  | { type: "pair"; link: string }
+  | { type: "unpair" };
 
 /** Where recorded steps go. */
 export type ConnectionMode = "standalone" | "connected";
@@ -42,6 +45,8 @@ export interface StatusReply {
   steps: number;
   /** "connected" = sending to the CLI server, "standalone" = storing in the extension. */
   mode: ConnectionMode;
+  /** True when a CLI session token is stored (connected mode needs it). */
+  paired?: boolean;
   error?: string;
 }
 

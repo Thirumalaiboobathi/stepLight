@@ -21,8 +21,38 @@ function localStore(): LocalRunStore {
   return store;
 }
 
+const TOKEN_KEY = "steplight-token";
+
+/**
+ * The CLI prints a link ending in `#token=<session token>`. Keep the token for this tab only
+ * (sessionStorage) and remove it from the address bar so it is not copied or leaked by accident.
+ */
+export function initToken(): void {
+  if (inExtension || typeof location === "undefined") return;
+  const match = /[#&]token=([0-9a-f]{16,128})/i.exec(location.hash);
+  if (!match) return;
+  try {
+    sessionStorage.setItem(TOKEN_KEY, match[1]!);
+  } catch {
+    /* storage blocked: the viewer will ask for the link again */
+  }
+  history.replaceState(null, "", location.pathname + location.search);
+}
+
+function authHeaders(): Record<string, string> {
+  try {
+    const token = sessionStorage.getItem(TOKEN_KEY);
+    return token ? { authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
+const AUTH_HINT = "Not authorised. Open the link printed by `steplight view` (it ends in #token=…).";
+
 async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: authHeaders() });
+  if (res.status === 401) throw new Error(AUTH_HINT);
   if (!res.ok) throw new Error(`${url}: ${res.status}`);
   return (await res.json()) as T;
 }
@@ -44,6 +74,7 @@ export async function fetchSnapshot(runId: string, stepId: string): Promise<stri
   if (inExtension) return localStore().getSnapshot(runId, stepId);
   const res = await fetch(
     `/api/runs/${encodeURIComponent(runId)}/snapshot/${encodeURIComponent(stepId)}`,
+    { headers: authHeaders() },
   );
   return res.ok ? res.text() : undefined;
 }
@@ -69,7 +100,8 @@ export async function buildBundle(run: Run): Promise<RunBundle> {
 export async function importRunFile(text: string): Promise<string> {
   const bundle = parseBundle(text); // validates and re-sanitises; throws on bad input
   if (inExtension) return localStore().importRun(bundle.run, bundle.snapshots);
-  const res = await fetch("/api/import", { method: "POST", body: text });
+  const res = await fetch("/api/import", { method: "POST", body: text, headers: authHeaders() });
+  if (res.status === 401) throw new Error(AUTH_HINT);
   const body = (await res.json()) as { id?: string; error?: string };
   if (!res.ok || !body.id) throw new Error(body.error ?? `import failed (${res.status})`);
   return body.id;

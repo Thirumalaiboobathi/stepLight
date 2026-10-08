@@ -1,5 +1,18 @@
 # Progress
 
+## Round 3 status (in progress)
+
+| Part | Status |
+|---|---|
+| A. Existing attack surfaces | ✅ report CSP (hashed, no network), viewer CSP header, extension-page CSP, XSS tests (viewer + report, 6 payload families), CLI session token + pairing, Host/Origin checks, 5 MB limit, rate limit, zod ingest schema, id validation, extension sender + message validation (+ 59 security tests) |
+| B. Network capture + SPA | ⏳ |
+| C. Privacy controls | ⏳ |
+| D. Encryption at rest | ⏳ |
+| E. Enterprise controls | ⏳ |
+| F. Supply chain | ⏳ |
+| G. Honest docs | ⏳ |
+
+
 Round 1 (MVP) and Round 2 (store readiness, polish, developer features) are complete and committed. The acceptance command was verified from a fresh `git clone`:
 `pnpm install && pnpm -r build && pnpm -r test && pnpm demo` (all green; after a one-time `pnpm exec playwright install chromium`).
 

@@ -107,7 +107,7 @@ export async function runDemo(options = {}) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const { dir, flightsRunId, safeRunId } = await runDemo();
-    console.log(`\nRuns written to ${dir}\nView them with:  pnpm view   (then open http://localhost:4777)`);
+    console.log(`\nRuns written to ${dir}\nView them with:  pnpm view   (then open the link it prints)`);
     console.log(`Inspect: ${path.join(dir, flightsRunId)}`);
     const diff = diffRuns(await readRun(dir, safeRunId), await readRun(dir, flightsRunId));
     console.log(`

@@ -155,12 +155,20 @@ describe.sequential("Chrome extension in a real browser", () => {
     });
     const api = async <T>(p: string): Promise<T> => {
       const port = (server!.address() as AddressInfo).port;
-      return (await (await fetch(`http://127.0.0.1:${port}${p}`)).json()) as T;
+      return (await (await fetch(`http://127.0.0.1:${port}${p}`, { headers: { authorization: `Bearer ${server!.token}` } })).json()) as T;
     };
 
     const popup = await popupPage();
-    const idle = await popup.evaluate(() => chrome.runtime.sendMessage({ type: "status" }));
-    expect(idle).toMatchObject({ mode: "connected" });
+    // Not paired yet: the server is up, but the extension has no token, so it stays standalone.
+    const unpaired = await popup.evaluate(() => chrome.runtime.sendMessage({ type: "status" }));
+    expect(unpaired).toMatchObject({ mode: "standalone", paired: false });
+    // A wrong token is refused and not kept.
+    const wrong = await popup.evaluate(() => chrome.runtime.sendMessage({ type: "pair", link: "http://127.0.0.1:4777/#token=" + "a".repeat(64) }));
+    expect(wrong).toMatchObject({ error: expect.stringContaining("Could not reach") });
+    // Pairing with the link the CLI prints switches to connected mode.
+    const link = `http://127.0.0.1:4777/#token=${server!.token}`;
+    const idle = await popup.evaluate((l) => chrome.runtime.sendMessage({ type: "pair", link: l }), link);
+    expect(idle).toMatchObject({ mode: "connected", paired: true });
     const started = await popup.evaluate(() =>
       chrome.runtime.sendMessage({ type: "start", task: "Extension: book a flight" }),
     );
