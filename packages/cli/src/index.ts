@@ -38,7 +38,7 @@ export function buildProgram(): Command {
   program
     .name("steplight")
     .description("Replay and trace every step your AI agent takes.")
-    .version("0.1.0-rc.3");
+    .version("0.1.0");
 
   program
     .command("view")

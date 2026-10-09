@@ -1,5 +1,10 @@
 # Progress
 
+## npm: 0.1.0 (final)
+
+- Five packages: `steplight` (new, unscoped: SDK + `steplight` command), `@steplight/core`, `sdk`, `cli`, `redteam`. `0.1.0-rc.3` validated the unscoped package and its Trusted Publisher in CI: all five on `next` with provenance, `latest` untouched; fresh-install smoke test (`npm i -D steplight@next playwright`, `--version`, `--help`, record a local page, `check --latest`) and `npm audit signatures` (npm 11: 22 signatures, 20 attestations verified) passed.
+- 0.1.0 is tagged `v0.1.0` and published by the same workflow as `latest`; see CHANGELOG.md and docs/releasing.md, docs/github-actions.md.
+
 ## npm: 0.1.0-rc.2 published through GitHub OIDC trusted publishing
 
 - `@steplight/core`, `sdk`, `cli`, `redteam` @ `0.1.0-rc.2` are on npm under the `next` dist-tag (`latest` still `0.0.1`), published by the Release workflow from tag `v0.1.0-rc.2` (commit 981da07) with signed provenance (SLSA v1, repository `steplight-dev/steplight`, workflow `release.yml`). No npm token exists anywhere; the trusted publishers are validated by this publish.
