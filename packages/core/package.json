@@ -1,6 +1,6 @@
 {
   "name": "@steplight/core",
-  "version": "0.1.0-rc.2",
+  "version": "0.1.0-rc.3",
   "description": "Steplight trace schema, detectors, redaction, storage and OpenTelemetry mapping.",
   "license": "Apache-2.0",
   "type": "module",
