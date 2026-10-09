@@ -1,6 +1,6 @@
 name: Release
 
-# Publishes the four npm packages when a version tag is pushed (for example v0.1.0 or v0.1.0-rc.1).
+# Publishes the five npm packages (@steplight/core, redteam, sdk, cli and the unscoped steplight) when a version tag is pushed (for example v0.1.0 or v0.1.0-rc.1).
 #
 # There is no npm token anywhere: npm "trusted publishing" lets this workflow publish through its
 # GitHub OIDC identity (configured per package on npmjs.com: repository steplight-dev/steplight,
@@ -36,10 +36,10 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          for pkg in core sdk cli redteam; do
+          for pkg in core sdk cli redteam steplight; do
             version=$(node -p "require('./packages/$pkg/package.json').version")
             if [ "v$version" != "$TAG" ]; then
-              echo "::error::tag $TAG does not match @steplight/$pkg version $version"
+              echo "::error::tag $TAG does not match the version of packages/$pkg ($version)"
               exit 1
             fi
           done
@@ -51,8 +51,8 @@ jobs:
       - name: Pack the tarballs (workspace dependencies are rewritten to real versions)
         run: |
           mkdir -p "$RUNNER_TEMP/tarballs"
-          for pkg in core redteam sdk cli; do
-            pnpm --filter "@steplight/$pkg" pack --pack-destination "$RUNNER_TEMP/tarballs"
+          for name in @steplight/core @steplight/redteam @steplight/sdk @steplight/cli steplight; do
+            pnpm --filter "$name" pack --pack-destination "$RUNNER_TEMP/tarballs"
           done
           ls -l "$RUNNER_TEMP/tarballs"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -88,6 +88,7 @@ jobs:
           dist_tag=latest
           case "$TAG" in *-*) dist_tag=next ;; esac
           echo "Publishing $TAG under dist-tag $dist_tag"
-          for pkg in core redteam sdk cli; do
-            npm publish "./tarballs/steplight-$pkg-${TAG#v}.tgz" --provenance --access public --tag "$dist_tag"
+          # dependencies first: the unscoped `steplight` package depends on the other four
+          for file in steplight-core steplight-redteam steplight-sdk steplight-cli steplight; do
+            npm publish "./tarballs/$file-${TAG#v}.tgz" --provenance --access public --tag "$dist_tag"
           done

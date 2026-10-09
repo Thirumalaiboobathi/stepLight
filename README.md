@@ -75,7 +75,17 @@ The cheapest fare is ₹28,000. Premium is ₹42,000. A naive agent reads the pa
 
 Step 4 links back to step 1, so you can see *which page told the agent to do it*.
 
-## Quickstart
+## Install
+
+```bash
+npm i -D steplight playwright           # SDK + command line (playwright is only needed to record)
+npx playwright install chromium
+npx steplight view                      # replay viewer for the runs in .steplight/runs
+```
+
+`steplight` is the one-install package: it re-exports the SDK (`import { steplight } from "steplight"`) and provides the `steplight` command. It is built on the scoped packages, which you can also install on their own: [`@steplight/sdk`](packages/sdk) (recording), [`@steplight/cli`](packages/cli) (viewer, checks, exports), [`@steplight/core`](packages/core) (detectors, redaction, storage) and [`@steplight/redteam`](packages/redteam) (attack pages). All are published from CI with npm provenance. To use it in CI, see the [GitHub Actions guide](docs/github-actions.md).
+
+## Quickstart (from source, to try the demo or contribute)
 
 Requirements: Node 20+, pnpm 9+.
 
@@ -129,7 +139,7 @@ Input *values* are never captured (only which field changed); password, card, on
 
 ```ts
 import { chromium } from "playwright";
-import { steplight } from "@steplight/sdk";
+import { steplight } from "steplight";   // same API as @steplight/sdk
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
@@ -199,6 +209,8 @@ steplight check --latest --rules steplight.rules.yml                    # exit 0
 steplight check <runId> --format junit --out steplight-junit.xml
 steplight check --latest --format sarif --out steplight.sarif           # GitHub code scanning
 ```
+
+Step-by-step setup (install, wrapping your agent, rules, workflow, artifact and SARIF upload): [docs/github-actions.md](docs/github-actions.md).
 
 **GitHub Action (Marketplace):** [Steplight Agent Check](https://github.com/steplight-dev/steplight-check-action) runs the same check in a workflow with no install step: a single bundled file, no network calls, a redacted and escaped job summary, JUnit or SARIF output, and a `fail-on` severity threshold. Pin it by commit SHA:
 

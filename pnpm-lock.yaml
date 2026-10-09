@@ -172,6 +172,19 @@ importers:
         specifier: ^1.64.0
         version: 1.64.0
 
+  packages/steplight:
+    dependencies:
+      '@steplight/cli':
+        specifier: workspace:*
+        version: link:../cli
+      '@steplight/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+    devDependencies:
+      playwright:
+        specifier: ^1.64.0
+        version: 1.64.0
+
   packages/viewer:
     dependencies:
       '@steplight/core':

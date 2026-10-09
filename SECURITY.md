@@ -21,7 +21,7 @@ Use GitHub's private vulnerability reporting:
 **<https://github.com/steplight-dev/steplight/security/advisories/new>** (Security tab → *Report a vulnerability*).
 This creates a private advisory visible only to the maintainers and you.
 
-Helpful details: affected package and version (`@steplight/core`, `sdk`, `cli`, `redteam`, or the Chrome extension),
+Helpful details: affected package and version (`steplight`, `@steplight/core`, `sdk`, `cli`, `redteam`, or the Chrome extension),
 what an attacker needs (a malicious web page? a local process? a malicious exported file?), steps to reproduce or a
 proof of concept (a small HTML page is ideal — see `packages/redteam` for how we build attack pages), and the impact
 you expect. If you are unsure whether something is a vulnerability, report it anyway.
@@ -62,7 +62,7 @@ and findings in third-party dependencies that are not reachable from Steplight (
 
 ## Verifying what you install
 
-- npm packages are published from GitHub Actions with **provenance**: run `npm audit signatures` to verify them.
+- npm packages (`steplight`, `@steplight/core`, `sdk`, `cli`, `redteam`) are published from GitHub Actions with **provenance**: run `npm audit signatures` to verify them. **`npm audit signatures` needs npm 11+; older versions wrongly report attestations as invalid** (they also flag packages such as `zod` and `@opentelemetry/*`).
 - Each push to `main` and each release produces a **CycloneDX SBOM** (`sbom.yml` workflow artifact).
 - All GitHub Actions in this repository are pinned to commit SHAs, workflows run with read-only permissions, and
   `pnpm audit --audit-level=high` runs on every dependency change and weekly.

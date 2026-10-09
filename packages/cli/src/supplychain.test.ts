@@ -80,6 +80,10 @@ describe("GitHub workflows", () => {
     expect(publish).toContain("--access public");
     expect(publish).toContain("*-*) dist_tag=next");
     expect(publish).toContain('--tag "$dist_tag"');
+    // all five packages are packed and published, dependencies first, the unscoped one last
+    expect(release.text).toContain("@steplight/core @steplight/redteam @steplight/sdk @steplight/cli steplight");
+    expect(release.text).toContain("steplight-core steplight-redteam steplight-sdk steplight-cli steplight;");
+    expect(verify).toContain("for pkg in core sdk cli redteam steplight");
     // the publish job never checks out or installs repository code
     expect(jobs["publish"]!.steps.map((s) => JSON.stringify(s)).join("")).not.toMatch(/actions\/checkout|pnpm install/);
     // the tag must match every package version
@@ -116,8 +120,8 @@ describe("Dependabot", () => {
 });
 
 describe("published packages", () => {
-  for (const name of ["core", "sdk", "cli", "redteam"]) {
-    it(`@steplight/${name} publishes publicly with provenance and ships only built files`, () => {
+  for (const name of ["core", "sdk", "cli", "redteam", "steplight"]) {
+    it(`${name === "steplight" ? "steplight" : `@steplight/${name}`} publishes publicly with provenance and ships only built files`, () => {
       const pkg = JSON.parse(readFileSync(path.join(root, "packages", name, "package.json"), "utf8"));
       expect(pkg.publishConfig).toEqual({ access: "public", provenance: true });
       expect(pkg.license).toBe("Apache-2.0");
@@ -126,9 +130,9 @@ describe("published packages", () => {
       expect(pkg.files.every((f: string) => ["dist", "viewer-dist"].includes(f))).toBe(true);
     });
   }
-  it("the four packages share one version, which the code reports, and each ships a README and LICENSE", () => {
+  it("the five packages share one version, which the code reports, and each ships a README and LICENSE", () => {
     const versions = new Set<string>();
-    for (const name of ["core", "sdk", "cli", "redteam"]) {
+    for (const name of ["core", "sdk", "cli", "redteam", "steplight"]) {
       versions.add(JSON.parse(readFileSync(path.join(root, "packages", name, "package.json"), "utf8")).version);
       expect(existsSync(path.join(root, "packages", name, "README.md")), `${name} README`).toBe(true);
       expect(readFileSync(path.join(root, "packages", name, "LICENSE"), "utf8"), `${name} LICENSE`).toContain("Apache License");

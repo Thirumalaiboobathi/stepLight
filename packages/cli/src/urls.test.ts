@@ -53,7 +53,7 @@ describe("repository URLs", () => {
   });
 
   it("every published package points at steplight-dev/steplight", () => {
-    for (const pkg of ["core", "cli", "sdk", "redteam"]) {
+    for (const pkg of ["core", "cli", "sdk", "redteam", "steplight"]) {
       const json = JSON.parse(readFileSync(path.join(ROOT, "packages", pkg, "package.json"), "utf8")) as {
         repository?: { url?: string };
         homepage?: string;
@@ -63,6 +63,14 @@ describe("repository URLs", () => {
       expect(json.homepage, pkg).toBe("https://github.com/steplight-dev/steplight#readme");
       expect(json.bugs?.url, pkg).toBe("https://github.com/steplight-dev/steplight/issues");
     }
+  });
+
+  it("the getting-started guide pins every action by commit SHA and links to the real repositories", () => {
+    const guide = readFileSync(path.join(ROOT, "docs", "github-actions.md"), "utf8");
+    const uses = [...guide.matchAll(/uses:\s*(\S+)@(\S+)/g)];
+    expect(uses.length).toBeGreaterThan(3);
+    for (const m of uses) expect(m[2], m[1]).toMatch(/^[0-9a-f]{40}$/);
+    expect(guide).toContain("steplight-dev/steplight-check-action@");
   });
 
   it("the public Action README and security policy use the organisation's repositories", () => {

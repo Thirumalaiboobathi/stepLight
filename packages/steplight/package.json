@@ -1,51 +1,50 @@
 {
-  "name": "@steplight/cli",
+  "name": "steplight",
   "version": "0.1.0-rc.2",
-  "description": "Steplight CLI: view and export recorded agent runs.",
+  "description": "Flight recorder for AI agents that drive a browser: record, replay, and flag prompt injection and data exfiltration. SDK and CLI in one install.",
   "license": "Apache-2.0",
   "type": "module",
-  "bin": {
-    "steplight": "./dist/bin.js"
-  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./check": {
-      "types": "./dist/checkApi.d.ts",
-      "default": "./dist/checkApi.js"
-    },
-    "./bin": {
-      "default": "./dist/bin.js"
     }
   },
+  "bin": {
+    "steplight": "./dist/bin.js"
+  },
   "files": [
-    "dist",
-    "viewer-dist"
+    "dist"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "test": "vitest run",
-    "prepack": "node scripts/copy-viewer.mjs"
+    "test": "vitest run"
   },
   "dependencies": {
-    "@steplight/core": "workspace:*",
-    "@steplight/redteam": "workspace:*",
-    "commander": "^12.1.0",
-    "yaml": "^2.9.1",
-    "zod": "^4.6.5"
+    "@steplight/cli": "workspace:*",
+    "@steplight/sdk": "workspace:*"
+  },
+  "peerDependencies": {
+    "playwright": ">=1.40"
+  },
+  "peerDependenciesMeta": {
+    "playwright": {
+      "optional": true
+    }
   },
   "devDependencies": {
-    "@playwright/test": "^1.64.0",
-    "@steplight/demo-agent": "workspace:*",
-    "@steplight/fixtures-site": "workspace:*",
-    "@steplight/sdk": "workspace:*",
-    "@steplight/viewer": "workspace:*",
     "playwright": "^1.64.0"
   },
+  "keywords": [
+    "ai-agents",
+    "browser-agents",
+    "prompt-injection",
+    "playwright",
+    "security",
+    "observability"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/steplight-dev/steplight.git"
